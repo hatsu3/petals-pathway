@@ -1,11 +1,11 @@
 import copy
 import threading
 
-
 # TODO: add a reverse lookup table: stage -> server_id (replicas)
 # TODO: we could add more utility functions to this class
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
+
     INFO_TYPES = ['ip', 'port', 'location', 'status', 'stages', 'load']
 
     def __init__(self):
@@ -47,6 +47,23 @@ class DistributedHashTable:
                 else:
                     # Update the specific information of an existing server
                     self.server_info[server_id][info_type] = value
+
+    """
+    Servers often need to contact DHT in order to get a list of servers serving
+    the stage they need right now, for a task they are executing. This method
+    allows for that by returning the set of such servers.
+    """
+    def get_servers_with_stage(self, desired_stage):
+        # TODO: Is using the lock necessary here? If we mess up, and return a
+        # server that does not in fact serve the given stage, we should be fine
+        # since the server will have a timeout, and just try again.
+        output = {}
+        with self.lock:
+            for server in self.server_info:
+                stages_served = server["stages"]
+                if desired_stage in stages_served:
+                    output.add(server)
+        return output
 
     def delete(self, key):
         with self.lock:
