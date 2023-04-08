@@ -152,7 +152,11 @@ class RoutingPolicy:
         self.update_if_needed()
 
     def route(self, request: InferRequest) -> int:
-        return 0
+        # Get all servers currently serving needed stage
+        possible_servers = dht.get_servers_with_stage(request.stage_index);
+        # Return the server with the smallest load
+        possible_servers.sort(key = lambda x: x.load_level())
+        return possible_servers[0]
     
     def _update(self):
         pass
