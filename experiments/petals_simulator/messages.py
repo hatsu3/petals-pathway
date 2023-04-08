@@ -1,17 +1,22 @@
 import uuid
 
+from geopy import Point
+
 
 # TODO: make this a dataclass
 # A request to run a task in the multi-task model
 # initialized with the IP address of the client and the task ID
 class InferRequest:
-    def __init__(self, request_id: uuid.UUID, client_ip: str, client_port: int, task_id: int):
+    def __init__(self, request_id: uuid.UUID, client_ip: str, client_port: int, client_location: Point, task_name: str):
         self.request_id = request_id
         self.client_ip = client_ip
         self.client_port = client_port
-        self.task_id = task_id
+        self.client_location = client_location
+
+        self.task_name = task_name
         
         # The index of the next stage to execute, initialized to 0
+        # keeps track of the progress of the request
         self.next_stage_idx = 0
 
     def update(self) -> "InferRequest":
@@ -23,14 +28,19 @@ class InferRequest:
             "request_id": str(self.request_id),
             "client_ip": self.client_ip,
             "client_port": self.client_port,
-            "task_id": self.task_id,
+            "client_location": {
+                "latitude": self.client_location.latitude,
+                "longitude": self.client_location.longitude
+            },
+            "task_name": self.task_name,
             "next_stage_idx": self.next_stage_idx
         }
     
     @classmethod
     def from_json(cls, json):
         request_id = uuid.UUID(json["request_id"])
-        request = cls(request_id, json["client_ip"], json["client_port"], json["task_id"])
+        client_loc = Point(json["client_location"]["latitude"], json["client_location"]["longitude"])
+        request = cls(request_id, json["client_ip"], json["client_port"], client_loc, json["task_name"])
         request.next_stage_idx = json["next_stage_idx"]
         return request
 

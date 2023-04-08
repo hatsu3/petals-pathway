@@ -4,16 +4,25 @@ import queue
 import socket
 import threading
 import time
+from typing import Any
 
 from geopy import Point
 
-from .multitask_model import MultiTaskModel
+from .multitask_model import MultiTaskModel, Stage
 from .latency_estimator import LatencyEstimator
 from .dht import DistributedHashTable
 from .messages import InferRequest, InferResponse
+from .stage_profiler import ProfilingResults
 
 
-TASK_FUNC_REGISTRY = {}
+def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
+    latency = prof_results.get_latency(stage.name, batch_size)
+    time.sleep(latency / 1000)
+
+
+TASK_FUNC_REGISTRY = {
+    "simulated_execution": simulated_execution,
+}
 
 
 # Simulates executing a stage of the multi-task model on GPU
@@ -102,13 +111,16 @@ class RequestPriortizer(threading.Thread):
             self.priority_queue.put((priority, task))
 
 
+# NOTE: currently we do not consider batching and the batch size is always 1
 # A thread that handles incoming connections from clients
 # deserialized tasks and adds them to the task queue
 class ConnectionHandler(threading.Thread):
-    def __init__(self, port: int, task_pool: queue.Queue):
+    def __init__(self, port: int, task_pool: queue.Queue, model: MultiTaskModel, prof_results: ProfilingResults):
         super().__init__()
         self.task_pool = task_pool
         self.port = port
+        self.model = model
+        self.prof_results = prof_results
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -120,8 +132,12 @@ class ConnectionHandler(threading.Thread):
                 if not request_json:  # Exit signal
                     break
                 request = InferRequest.from_json(json.loads(request_json))
-                task = GPUTask(request, "dummy_func")  # TODO: construct GPU task
+                stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+                task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
                 self.task_pool.put(task)
+                
+                # Send a response to the client or the upstream server
+                # this does not indicate completion of the task but rather that the task has been received
                 conn.sendall(b"OK")
                 conn.close()
 
@@ -139,7 +155,6 @@ class RoutingPolicy:
         return 0
     
     def _update(self):
-        # TODO: update routing policy
         pass
 
     def update_if_needed(self):
@@ -149,12 +164,17 @@ class RoutingPolicy:
         self.last_update = time.time()
 
 
-# TODO: simulate communication latency between servers
 class RequestRouter(threading.Thread):
-    def __init__(self, completed_queue: queue.Queue, routing_policy: RoutingPolicy):
+    def __init__(self, completed_queue: queue.Queue, routing_policy: RoutingPolicy, latency_est: LatencyEstimator, 
+                 my_location: Point, dht: DistributedHashTable, model: MultiTaskModel):
         super().__init__()
         self.completed_queue = completed_queue
         self.routing_policy = routing_policy
+        self.latency_est = latency_est
+        self.my_location = my_location
+        self.dht = dht
+        self.model = model
+
         self.connections = {}   # connection with downstream servers
 
     def _connect(self, server_id: int, port: int):
@@ -162,9 +182,24 @@ class RequestRouter(threading.Thread):
         sock.connect(('localhost', port))
         self.connections[server_id] = sock
 
+    # TODO: disconnect from servers that are down or ...
     def _disconnect(self, server_id: int):
         self.connections[server_id].close()
         del self.connections[server_id]
+
+    def _simulate_comm_latency(self, location: Point):
+        comm_latency = self.latency_est.predict(self.my_location, location)
+        time.sleep(comm_latency / 1000)
+
+    def _respond_to_client(self, request: InferRequest, result: Any):
+        # Simulate communication latency
+        self._simulate_comm_latency(request.client_location)
+
+        # Send the response to the client
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((request.client_ip, request.client_port))
+            response = InferResponse(request, result)
+            sock.sendall(json.dumps(response.to_json()).encode())
 
     def run(self):
         while True:
@@ -178,14 +213,25 @@ class RequestRouter(threading.Thread):
             except queue.Empty:
                 continue
 
+            # Update the request
+            request = task.request.update()  # that we have executed the current stage
+
+            # If the task is the last stage, send the response to the client
+            if task.request.next_stage_idx == self.model.get_task_num_stages(task.request.task_name):
+                self._respond_to_client(task.request, task.result)
+                continue
+
             # Determine the downstream server and send the request
             server_id = self.routing_policy.route(task.request)
             if server_id not in self.connections:
                 self._connect(server_id, Server.START_PORT + server_id)
             sock = self.connections[server_id]
 
-            # Update the request and send it to the downstream server
-            request = task.request.update()
+            # Simulate communication latency
+            server_location = self.dht.get_server_location(server_id)
+            self._simulate_comm_latency(server_location)
+
+            # Forward the request to the downstream server
             sock.sendall(json.dumps(request.to_json()).encode())
         
 
@@ -245,6 +291,7 @@ class Server:
                  location: Point,
                  dht: DistributedHashTable,
                  model: MultiTaskModel,
+                 prof_results: ProfilingResults,
                  latency_est: LatencyEstimator,
                  num_router_threads: int,
                  announce_interval: float,
@@ -257,6 +304,7 @@ class Server:
         self.location = location
         self.dht = dht
         self.model = model
+        self.prof_results = prof_results
         self.latency_est = latency_est
         self.announce_interval = announce_interval
         self.rebalance_interval = rebalance_interval
@@ -278,7 +326,9 @@ class Server:
         # requests -> connection handler -> task pool
         self.connection_handler = ConnectionHandler(
             port=Server.START_PORT + server_id, 
-            task_pool=self.task_pool
+            task_pool=self.task_pool,
+            model=self.model,
+            prof_results=self.prof_results,
         )
 
         # task pool -> request priortizer -> priority queue
@@ -298,7 +348,11 @@ class Server:
         self.request_routers = [
             RequestRouter(
                 completed_queue=self.completed_tasks,
-                routing_policy=self.routing_policy
+                routing_policy=self.routing_policy,
+                latency_est=self.latency_est,
+                my_location=self.location,
+                dht=self.dht,
+                model=self.model,
             )
             for _ in range(self.num_router_threads)
         ]

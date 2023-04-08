@@ -74,6 +74,24 @@ class StageProfiler:
         print(f"Saved profiling results to {csv_file}")
 
 
+# Profiling results for all stages in a multi-stage model
+# and profiling configurations
+class ProfilingResults:
+    def __init__(self) -> None:
+        pass
+
+    def save(self, json_file: str):
+        pass
+    
+    @classmethod
+    def load(cls, json_file: str):
+        pass
+
+    # Get the execution latency of a stage in milliseconds
+    def get_latency(self, stage_name: str, batch_size: int):
+        return 0.0
+
+
 if __name__ == '__main__':
     import torch.nn as nn
     from torchvision.models import resnet18

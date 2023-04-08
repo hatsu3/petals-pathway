@@ -165,6 +165,23 @@ class MultiTaskModel:
         # case 2. current stage is not the last stage of the task
         return self.routing_table[stage_name][task_name]
 
+    # return the stage_idx-th stage of the task
+    def get_stage(self, task_name: str, stage_idx: int):
+        if task_name not in self.paths:
+            raise ValueError(f"Task {task_name} does not exist")
+        
+        if stage_idx >= len(self.paths[task_name].stages):
+            raise ValueError(f"Stage index {stage_idx} is out of range")
+        
+        return self.paths[task_name].stages[stage_idx]
+    
+    # return the number of stages of the task
+    def get_task_num_stages(self, task_name: str):
+        if task_name not in self.paths:
+            raise ValueError(f"Task {task_name} does not exist")
+        
+        return len(self.paths[task_name].stages)
+
     # WARNING: this function should not be called
     def add_path(self, path: TaskPath):
         if path.name in self.paths:
