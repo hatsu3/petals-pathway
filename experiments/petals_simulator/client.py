@@ -1,0 +1,153 @@
+import socket
+import asyncio
+import json
+import uuid
+import random
+from enum import Enum
+from typing import Tuple
+
+from geopy import Point
+
+from .server import Server
+from .dht import DistributedHashTable
+from .multitask_model import MultiTaskModel
+from .messages import InferRequest, InferResponse
+from .latency_estimator import LatencyEstimator
+
+
+class RequestMode(Enum):
+    UNIFORM = 1
+    POISSON = 2
+
+
+# Policy for selecting which server in the swarm to send a request to
+# options: random, closest, least loaded, etc.
+class ServerSelectionPolicy:
+    def __init__(self, dht: DistributedHashTable):
+        self.dht = dht
+
+    # return server ip and port
+    def choose_server(self) -> Tuple[str, int]:
+        return "localhost", 8000
+
+    def update(self):
+        pass
+
+
+# TODO: last server in the chain should send the response back to the client at recv_port
+# NOTE: for now we assume that a client only requests one task repeatedly
+class AsyncClient:
+    SEND_START_PORT = 9000
+    RECV_START_PORT = 10000
+
+    def __init__(self, 
+                 client_id: int, 
+                 location: Point, 
+                 task_id: int,
+                 dht: DistributedHashTable, 
+                 model: MultiTaskModel,
+                 latency_est: LatencyEstimator,
+                 server_sel_policy: ServerSelectionPolicy, 
+                 request_mode=RequestMode.POISSON,
+                 request_avg_interval=5, 
+                 update_interval=10):
+        self.client_id = client_id
+        self.location = location
+        self.task_id = task_id
+        self.dht = dht
+        self.model = model
+        self.latency_est = latency_est
+        self.server_sel_policy = server_sel_policy
+        self.request_mode = request_mode
+        self.request_avg_interval = request_avg_interval
+        self.update_interval = update_interval
+        
+        self.pending_requests = set()
+        self.is_running = True
+
+    @property
+    def send_port(self):
+        return self.SEND_START_PORT + self.client_id
+
+    @property
+    def recv_port(self):
+        return self.RECV_START_PORT + self.client_id
+    
+    def get_request_interval(self):
+        if self.request_mode == RequestMode.UNIFORM:
+            return self.request_avg_interval
+        elif self.request_mode == RequestMode.POISSON:
+            # request_interval means the average interval between requests
+            return random.expovariate(1 / self.request_avg_interval)
+        else:
+            raise ValueError(f"Invalid request mode: {self.request_mode}")
+
+    async def send_request(self, server_ip, server_port, request_id):
+        # TODO: simulate communication delay using latency estimator
+        # await asyncio.sleep(self.latency_est.get_latency(self.location, server.location))
+        server_id = server_port - Server.START_PORT
+
+        request = InferRequest(request_id, "localhost", self.send_port, self.task_id)
+        request_bytes = json.dumps(request.to_json()).encode("utf-8")
+        
+        # send request to entry server
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((server_ip, server_port))
+            sock.sendall(request_bytes)
+            sock.settimeout(1)
+            try:
+                response = sock.recv(1024).decode("utf-8")
+                if response != "OK": 
+                    print(f"Received error response from entry server {server_id}")
+            except socket.timeout:
+                print(f"Request {request_id} timed out")
+
+        print(f"Request {request_id} sent to server {server_id}")
+
+    async def connection_handler(self, reader, writer):
+        while self.is_running:
+            data = await reader.read(1024)
+            if not data:
+                break
+
+            # Get the server id from the port number of the server
+            remote_addr = writer.get_extra_info('peername')
+            assert remote_addr is not None
+            server_port = remote_addr[1]
+            server_id = server_port - Server.START_PORT
+
+            # Parse the response and notify the client
+            response = InferResponse.from_json(json.loads(data.decode("utf-8")))
+            self.pending_requests.remove(response.request_id)
+            print(f"Received response {response.request_id} from server {server_id}")
+
+    async def start_server(self):
+        server = await asyncio.start_server(self.connection_handler, host='0.0.0.0', port=self.recv_port)
+        async with server:
+            await server.serve_forever()
+
+    async def periodic_request(self):
+        while self.is_running:
+            server_ip, server_port = self.server_sel_policy.choose_server()
+            request_id = uuid.uuid4()
+            self.pending_requests.add(request_id)
+
+            asyncio.create_task(self.send_request(server_ip, server_port, request_id))
+
+            await asyncio.sleep(self.get_request_interval())
+
+    async def update_server_sel_policy(self):
+        while self.is_running:
+            self.server_sel_policy.update()
+            await asyncio.sleep(self.update_interval)
+
+    async def run(self):
+        await asyncio.gather(
+            self.periodic_request(),
+            self.update_server_sel_policy(),
+            self.start_server(),
+            return_exceptions=True
+        )
+
+    def stop(self):
+        self.is_running = False
