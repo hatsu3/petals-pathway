@@ -34,7 +34,6 @@ class ServerSelectionPolicy:
         pass
 
 
-# TODO: last server in the chain should send the response back to the client at recv_port
 # NOTE: for now we assume that a client only requests one task repeatedly
 class AsyncClient:
     SEND_START_PORT = 9000
@@ -43,7 +42,7 @@ class AsyncClient:
     def __init__(self, 
                  client_id: int, 
                  location: Point, 
-                 task_id: int,
+                 task_name: str,
                  dht: DistributedHashTable, 
                  model: MultiTaskModel,
                  latency_est: LatencyEstimator,
@@ -51,9 +50,10 @@ class AsyncClient:
                  request_mode=RequestMode.POISSON,
                  request_avg_interval=5, 
                  update_interval=10):
+        
         self.client_id = client_id
         self.location = location
-        self.task_id = task_id
+        self.task_name = task_name
         self.dht = dht
         self.model = model
         self.latency_est = latency_est
@@ -83,14 +83,17 @@ class AsyncClient:
             raise ValueError(f"Invalid request mode: {self.request_mode}")
 
     async def send_request(self, server_ip, server_port, request_id):
-        # TODO: simulate communication delay using latency estimator
-        # await asyncio.sleep(self.latency_est.get_latency(self.location, server.location))
+        # Simulate communication latency
         server_id = server_port - Server.START_PORT
+        server_location = self.dht.get_server_location(server_id)
+        comm_latency = self.latency_est.predict(self.location, server_location)
+        await asyncio.sleep(comm_latency)
 
-        request = InferRequest(request_id, "localhost", self.send_port, self.task_id)
+        # Build request
+        request = InferRequest(request_id, "localhost", self.recv_port, self.location, self.task_name)
         request_bytes = json.dumps(request.to_json()).encode("utf-8")
         
-        # send request to entry server
+        # Send request to the entry server
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((server_ip, server_port))
             sock.sendall(request_bytes)
