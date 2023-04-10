@@ -99,18 +99,18 @@ class SchedulingEstimationPolicy(SchedulingPolicy):
         super.__init__(model)
         self.profiling_results = profiling_results
     
-    def estimate_time_to_completion(task: GPUTask):
+    def estimate_time_to_completion(self, task: GPUTask):
         estimation = 0.0
-        next_stage_name = model.get_stage(task.task_name, task.request.next_stage_idx)
+        next_stage_name = self.model.get_stage(task.task_name, task.request.next_stage_idx)
         while next_stage_name != None:
-            estimation += profiling_results.get_latency(next_stage_name)
-            next_stage_name = model.get_next_stage(next_stage_name, task.task_name)
+            estimation += self.profiling_results.get_latency(next_stage_name)
+            next_stage_name = self.model.get_next_stage(next_stage_name, task.task_name)
         return estimation
     
     def calculate_priority(self, task: GPUTask) -> float:
         # estimated_completion_time = current_time - timestamp + estimate_time_to_completion
         # the lower priority, the earlier to be scheduled, so negate this expression
-        return -(time.time() * 1e3 - task.request.timestamp + estimate_time_to_completion(task))
+        return -(time.time() * 1e3 - task.request.timestamp + self.estimate_time_to_completion(task))
 
 
 # A thread that prioritizes tasks based on the scheduling policy
