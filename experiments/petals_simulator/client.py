@@ -26,9 +26,18 @@ class ServerSelectionPolicy:
     def __init__(self, dht: DistributedHashTable):
         self.dht = dht
 
-    # return server ip and port
-    def choose_server(self) -> Tuple[str, int]:
-        return "localhost", 8000
+    """
+    Choose the server that can serve the first stage of the new request. Return
+    the IP of the server and the port.
+    """
+    def choose_server(self, model: MultiTaskModel, request: InferRequest) -> Tuple[str, int]:
+        # Pick the next stage of the model that is currently running.
+        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+        # Find all the servers serving that stage.
+        possible_servers = self.dht.get_servers_with_stage(next_stage)
+        # Find the server with smallest current load, and return its IP and port.
+        possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
+        return possible_servers[0].ip, possible_servers[0].port
 
     def update(self):
         pass
@@ -82,15 +91,18 @@ class AsyncClient:
         else:
             raise ValueError(f"Invalid request mode: {self.request_mode}")
 
-    async def send_request(self, server_ip, server_port, request_id):
+    """
+    Send an already created request to the server designated by `server_ip` and
+    `server_port`.
+    """
+    async def send_request(self, server_ip, server_port, request):
         # Simulate communication latency
         server_id = server_port - Server.START_PORT
         server_location = self.dht.get_server_location(server_id)
         comm_latency = self.latency_est.predict(self.location, server_location)
         await asyncio.sleep(comm_latency)
 
-        # Build request
-        request = InferRequest(request_id, "localhost", self.recv_port, self.location, self.task_name)
+        # Get the actual bytes from the request.
         request_bytes = json.dumps(request.to_json()).encode("utf-8")
         
         # Send request to the entry server
@@ -131,11 +143,18 @@ class AsyncClient:
 
     async def periodic_request(self):
         while self.is_running:
-            server_ip, server_port = self.server_sel_policy.choose_server()
+
+            # Create a new request ID and add it to pending requests set.
             request_id = uuid.uuid4()
             self.pending_requests.add(request_id)
 
-            asyncio.create_task(self.send_request(server_ip, server_port, request_id))
+            # Use the ID to build a `Request` object.
+            request = InferRequest(request_id, "localhost", self.recv_port, self.location, self.task_name)
+
+            # Select the server that will receive new request.
+            server_ip, server_port = self.server_sel_policy.choose_server(self.model, request)
+
+            asyncio.create_task(self.send_request(server_ip, server_port, request))
 
             await asyncio.sleep(self.get_request_interval())
 
