@@ -262,12 +262,24 @@ class RequestRouter(threading.Thread):
         
 
 class StageAssignmentPolicy:
-    def __init__(self, dht: DistributedHashTable):  # TODO: server info
+    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):  # TODO: server info
+        self.model = model
         self.dht = dht
 
-    def assign_stages(self, current_stages: list[int]) -> list[int]:
-        raise NotImplementedError
-    
+    @abstractmethod
+    def assign_stages(self, current_stages: list[str]) -> list[str]:
+        pass
+
+class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
+    def assign_stages(self, current_stages: list[str]) -> list[str]:
+        stages = self.model.get_stages()
+        capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage)) for stage in stages}
+        average_load = len(stages) / self.dht.get_number_of_servers
+        while average_load > len(current_stages):
+            candidate = min(capabilities, key=capabilities.get)
+            current_stages.append(candidate)
+            del capabilities[candidate]
+        return current_stages
 
 class DHTAnnouncer(threading.Thread):
     def __init__(self, server: "Server", dht: DistributedHashTable, announce_interval: float):

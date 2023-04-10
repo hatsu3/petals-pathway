@@ -84,6 +84,10 @@ class DistributedHashTable:
     def get_server_location(self, server_id: int) -> Point:
         return self.get((server_id, 'location'))
 
+    def get_number_of_servers(self):
+        with self.lock:
+            return len(self.server_info)
+    
     def to_json(self):
         with self.lock:
             return copy.deepcopy(self.server_info)

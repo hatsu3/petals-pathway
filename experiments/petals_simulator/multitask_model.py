@@ -175,6 +175,10 @@ class MultiTaskModel:
         
         return self.paths[task_name].stages[stage_idx]
     
+    # return all the stages
+    def get_stages(self):
+        return self.stages.values
+
     # return the number of stages of the task
     def get_task_num_stages(self, task_name: str):
         if task_name not in self.paths:
