@@ -1,8 +1,7 @@
 import copy
 import threading
-
 from geopy import Point
-
+from multitask_model import Stage
 
 # TODO: add a reverse lookup table: stage -> server_id (replicas)
 # TODO: we could add more utility functions to this class
@@ -70,7 +69,7 @@ class DistributedHashTable:
     the stage they need right now, for a task they are executing. This method
     allows for that by returning the set of such servers.
     """
-    def get_servers_with_stage(self, desired_stage) -> list[int]:
+    def get_servers_with_stage(self, desired_stage: Stage) -> list[int]:
         # TODO: Is using the lock necessary here? If we mess up, and return a
         # server that does not in fact serve the given stage, we should be fine
         # since the server will have a timeout, and just try again.
@@ -78,7 +77,7 @@ class DistributedHashTable:
         with self.lock:
             for server in self.server_info:
                 stages_served = server["stages"]
-                if desired_stage in stages_served:
+                if desired_stage.name in stages_served:
                     output.append(server)
         return output
 
