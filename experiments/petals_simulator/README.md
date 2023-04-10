@@ -4,6 +4,7 @@
 
 - [ ] Add timestamp field to `InferRequest`
 - [ ] Server selection on the client side. 
+- [ ] Servers should let DHT know about their load level
 
 ### Server Selection on Client Side
 

@@ -8,12 +8,13 @@ from typing import Any
 
 from geopy import Point
 
-from .multitask_model import MultiTaskModel, Stage
-from .latency_estimator import LatencyEstimator
-from .dht import DistributedHashTable
-from .messages import InferRequest, InferResponse
-from .stage_profiler import ProfilingResults
+from multitask_model import MultiTaskModel, Stage
+from latency_estimator import LatencyEstimator
+from dht import DistributedHashTable
+from messages import InferRequest, InferResponse
+from stage_profiler import ProfilingResults
 
+from abc import abstractmethod
 
 def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
     latency = prof_results.get_latency(stage.name, batch_size)
@@ -172,7 +173,7 @@ class RoutingPolicy:
     def route(self, request: InferRequest) -> int:
         # Get all servers currently serving needed stage
         # TODO: index the stage
-        possible servers = dht.get_servers_with_stage(model.get_stage(request.task_name, request.next_stage_idx))
+        possible_servers = dht.get_servers_with_stage(model.get_stage(request.task_name, request.next_stage_idx))
         # Return the server with the smallest load
         possible_servers.sort(key = lambda x: x.load_level())
         return possible_servers[0]

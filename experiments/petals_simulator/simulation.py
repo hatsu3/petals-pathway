@@ -2,12 +2,12 @@ import random
 import threading
 import time
 
-from .server import RoutingPolicy, SchedulingPolicy, Server, StageAssignmentPolicy
-from .client import AsyncClient, RequestMode, ServerSelectionPolicy
-from .dht import DistributedHashTable
-from .stage_profiler import StageProfiler
-from .multitask_model import MultiTaskModel, Stage
-from .latency_estimator import LatencyEstimator, generate_random_location
+from server import RoutingPolicy, SchedulingPolicy, Server, StageAssignmentPolicy
+from client import AsyncClient, RequestMode, ServerSelectionPolicy
+from dht import DistributedHashTable
+from stage_profiler import StageProfiler
+from multitask_model import MultiTaskModel, Stage
+from latency_estimator import LatencyEstimator, generate_random_location
 
 
 class Simulator:

@@ -2,7 +2,7 @@ import json
 
 import torch
 
-from .multitask_model import MultiTaskModel, Stage
+from multitask_model import MultiTaskModel, Stage
 
 
 def _profile_module(module, input_shape, batch_size, num_warmup=10, num_repeats=100, num_iters=10):
