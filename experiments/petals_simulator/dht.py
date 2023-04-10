@@ -88,6 +88,9 @@ class DistributedHashTable:
         with self.lock:
             return len(self.server_info)
     
+    def get_server_load(self, server_id: int):
+        return self.get((server_id, 'load'))
+
     def to_json(self):
         with self.lock:
             return copy.deepcopy(self.server_info)

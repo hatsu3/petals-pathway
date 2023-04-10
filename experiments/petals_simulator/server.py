@@ -16,6 +16,7 @@ from stage_profiler import ProfilingResults
 
 from abc import abstractmethod
 
+
 def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
     latency = prof_results.get_latency(stage.name, batch_size)
     time.sleep(latency / 1000)
@@ -96,15 +97,16 @@ class SchedulingPolicy:
 
 class SchedulingEstimationPolicy(SchedulingPolicy):
     def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
-        super.__init__(model)
+        super().__init__(model)
         self.profiling_results = profiling_results
     
     def estimate_time_to_completion(self, task: GPUTask):
         estimation = 0.0
-        next_stage_name = self.model.get_stage(task.task_name, task.request.next_stage_idx)
+        task_name = task.request.task_name
+        next_stage_name = self.model.get_stage(task_name, task.request.next_stage_idx).name
         while next_stage_name != None:
-            estimation += self.profiling_results.get_latency(next_stage_name)
-            next_stage_name = self.model.get_next_stage(next_stage_name, task.task_name)
+            estimation += self.profiling_results.get_latency(next_stage_name, batch_size=1)
+            next_stage_name = self.model.get_next_stage(next_stage_name, task_name)
         return estimation
     
     def calculate_priority(self, task: GPUTask) -> float:
@@ -175,9 +177,10 @@ class RoutingPolicy:
     def route(self, request: InferRequest) -> int:
         # Get all servers currently serving needed stage
         # TODO: index the stage
-        possible_servers = dht.get_servers_with_stage(model.get_stage(request.task_name, request.next_stage_idx))
+        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+        possible_servers = self.dht.get_servers_with_stage(next_stage)
         # Return the server with the smallest load
-        possible_servers.sort(key = lambda x: x.load_level())
+        possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
         return possible_servers[0]
     
     def _update(self):
@@ -270,16 +273,19 @@ class StageAssignmentPolicy:
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         pass
 
+
 class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
         capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage)) for stage in stages}
         average_load = len(stages) / self.dht.get_number_of_servers()
         while average_load > len(current_stages):
-            candidate = min(capabilities, key=capabilities.get)
+            # pick the stage with the least number of servers
+            candidate = min(capabilities, key=capabilities.get) # type: ignore
             current_stages.append(candidate)
             del capabilities[candidate]
         return current_stages
+
 
 class DHTAnnouncer(threading.Thread):
     def __init__(self, server: "Server", dht: DistributedHashTable, announce_interval: float):
@@ -293,12 +299,12 @@ class DHTAnnouncer(threading.Thread):
     """
     def _announce(self):
         # List all the information that potentially needs to be sent to DHT
-        server_id = server.server_id
+        server_id = self.server.server_id
         # TODO: Figure out what to do about the IP and the port
-        server_location = server.location
-        server_status = server.status
-        server_hosted_stages = server.hosted_stages
-        server_load_level = server.load_level()
+        server_location = self.server.location
+        server_status = self.server.status
+        server_hosted_stages = self.server.hosted_stages
+        server_load_level = self.server.load_level
 
         # Let the DHT know about the status of the server, the hosted stages,
         # and the current load level
@@ -366,7 +372,7 @@ class Server:
         self.num_router_threads = num_router_threads
         
         self.status = ServerStatus.OFFLINE
-        self.hosted_stages: list[int] = list()
+        self.hosted_stages: list[str] = list()
         
         # policies controlling the behavior of the server
         self.sched_policy = sched_policy

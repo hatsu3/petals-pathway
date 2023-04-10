@@ -177,7 +177,7 @@ class MultiTaskModel:
     
     # return all the stages
     def get_stages(self):
-        return self.stages.values
+        return self.stages.values()
 
     # return the number of stages of the task
     def get_task_num_stages(self, task_name: str):
