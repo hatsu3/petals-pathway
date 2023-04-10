@@ -1,8 +1,8 @@
 import random
 
-from .server import Server
-from .client import AsyncClient
-from .dht import DistributedHashTable
+from server import Server
+from client import AsyncClient
+from dht import DistributedHashTable
 
 
 class Simulator:
