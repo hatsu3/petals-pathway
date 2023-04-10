@@ -115,5 +115,8 @@ class LatencyEstimator:
 
 
 if __name__ == "__main__":
-    load_verizon_dataset()
-    fit_linreg()
+    latency_est = LatencyEstimator()
+    verizon_df = load_verizon_dataset()
+    latency_est.fit(verizon_df["distance"], verizon_df["avg_latency"])
+    print(f"R^2: {latency_est.score(verizon_df['distance'], verizon_df['avg_latency'])}")
+    latency_est.save(filename="data/latency_estimator.pkl")
