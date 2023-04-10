@@ -1,35 +1,89 @@
 import random
+import threading
+import time
 
-from .server import Server
-from .client import AsyncClient
+from .server import RoutingPolicy, SchedulingPolicy, Server, StageAssignmentPolicy
+from .client import AsyncClient, RequestMode, ServerSelectionPolicy
 from .dht import DistributedHashTable
+from .stage_profiler import StageProfiler
+from .multitask_model import MultiTaskModel, Stage
+from .latency_estimator import LatencyEstimator, generate_random_location
 
 
 class Simulator:
-    def __init__(self, num_servers: int, num_clients: int, num_requests: int):
-        # set up servers (join one by one)
-        # set up clients (send requests in some pattern)
-        # run for a while and dump stats
-        # clean up and exit gracefully
-        self.num_servers = num_servers
-        self.num_clients = num_clients
-        self.num_requests = num_requests
-
-        self.dht = DistributedHashTable()
-
-        self.servers = []
-        for i in range(num_servers):
-            self.servers.append(Server(self.dht, i))
-
-        self.clients = []
-        for i in range(num_clients):
-            self.clients.append(AsyncClient(self.dht, i))
+    def __init__(self, servers: list[Server], clients: list[AsyncClient]):
+        self.servers = servers
+        self.clients = clients
 
     def run(self):
-        # start servers
-        for server in self.servers:
-            server.start()
+        # Start the server thread
+        server_threads = [
+            threading.Thread(target=server.run, args=(30,))  # run for 30 seconds
+            for server in self.servers
+        ]
+        for server_thread in server_threads:
+            server_thread.start()
 
-        # start clients
-        for client in self.clients:
-            client.start()
+        # Start the client threads
+        client_threads = [
+            threading.Thread(target=client.run)  # TODO: stop client after a certain time
+            for client in self.clients
+        ]
+        for client_thread in client_threads:
+            client_thread.start()
+
+        # Wait for the server and client threads to finish
+        for server_thread in server_threads:
+            server_thread.join()
+        
+        for client_thread in client_threads:
+            client_thread.join()
+
+
+def run_simulation():
+    dht = DistributedHashTable()
+    model, prof_results = get_dummy_model_and_prof_results()
+    latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
+
+    server_sel_policy = ServerSelectionPolicy(dht)
+    sched_policy = SchedulingPolicy(model)
+    routing_policy = RoutingPolicy(model, dht, update_interval=3)
+    stage_assign_policy = StageAssignmentPolicy(dht)
+
+    num_servers = 10
+    num_clients = 10
+
+    servers = list()
+    for i in range(num_servers):
+        servers.append(Server(
+            server_id=i,
+            location=generate_random_location(),
+            dht=dht,
+            model=model,
+            prof_results=prof_results,
+            latency_est=latency_est,
+            num_router_threads=1,
+            announce_interval=3,
+            rebalance_interval=5,
+            sched_policy=sched_policy,
+            routing_policy=routing_policy,
+            stage_assignment_policy=stage_assign_policy,
+        ))
+
+    clients = list()
+    for i in range(num_clients):
+        clients.append(AsyncClient(
+            client_id=i,
+            location=generate_random_location(),
+            task_name=random.choice(list(model.paths.keys())),
+            dht=dht,
+            model=model,
+            latency_est=latency_est,
+            server_sel_policy=server_sel_policy,
+            request_mode=RequestMode.POISSON,
+            request_avg_interval=1,
+            update_interval=5
+        ))
+
+    simulator = Simulator(servers, clients)
+    simulator.run()

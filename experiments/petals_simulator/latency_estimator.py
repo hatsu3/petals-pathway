@@ -77,8 +77,8 @@ def generate_random_location(within_us=True):
 
 
 class LatencyEstimator:
-    def __init__(self):
-        self._estimator = None
+    def __init__(self, estimator=None):
+        self._estimator = estimator
 
     def fit(self, distances, latencies):
         if self._estimator is None:
@@ -106,11 +106,12 @@ class LatencyEstimator:
         with open(filename, "wb") as f:
             pkl.dump(self._estimator, f)
     
-    def load(self, filename="data/latency_estimator.pkl"):
+    @classmethod
+    def load(cls, filename="data/latency_estimator.pkl"):
         if not os.path.exists(filename):
             raise FileNotFoundError(f"{filename} does not exist.")
         with open(filename, "rb") as f:
-            self._estimator = pkl.load(f)
+            return cls(pkl.load(f))
 
 
 if __name__ == "__main__":

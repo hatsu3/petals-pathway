@@ -433,3 +433,10 @@ class Server:
             router.join()
         self.dht_announcer.join()
         self.stage_rebalancer.join()
+
+    def run(self, run_time: float):
+        self.start()
+        self.join()
+        time.sleep(run_time)
+        self.leave()
+        self.stop()
