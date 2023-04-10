@@ -304,7 +304,6 @@ class DHTAnnouncer(threading.Thread):
         self.dht.put((server_id, "ip"), self.server.ip)
         self.dht.put((server_id, "port"), self.server.port)
         self.dht.put((server_id, "location"), self.server.location)
-        self.dht.put((server_id, "status"), self.server.status)
         self.dht.put((server_id, "stages"), self.server.hosted_stages)
         self.dht.put((server_id, "load"), self.server.load_level)
 
@@ -329,11 +328,6 @@ class StageRebalancer(threading.Thread):
             self.hosted_stages = new_stages
             self.dht.put((self.server.server_id, "stages"), self.hosted_stages)
             time.sleep(self.rebalance_interval)
-
-
-class ServerStatus(Enum):
-    OFFLINE = 0
-    ONLINE = 1
 
 
 # TODO: each server pick a unique id by negotiating with the DHT
@@ -369,7 +363,6 @@ class Server:
         self.rebalance_interval = rebalance_interval
         self.num_router_threads = num_router_threads
         
-        self.status = ServerStatus.OFFLINE
         self.hosted_stages: list[str] = list()
         
         # policies controlling the behavior of the server
@@ -442,14 +435,11 @@ class Server:
     def join(self):
         init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
         self.hosted_stages = init_stages
-        self.status = ServerStatus.ONLINE
 
     # Called when the server leaves the swarm
     def leave(self):
-        # TODO: wait until all tasks are completed
-        self.status = ServerStatus.OFFLINE
+        self.dht.delete((self.server_id, None))
         self.hosted_stages.clear()
-        # TODO: announce the server's status to the DHT
 
     def start(self):
         self.connection_handler.start()

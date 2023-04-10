@@ -8,11 +8,11 @@ from multitask_model import Stage
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
 
-    INFO_TYPES = ['ip', 'port', 'location', 'status', 'stages', 'load']
+    INFO_TYPES = ['ip', 'port', 'location', 'stages', 'load']
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.server_info = dict()  # server_id -> (ip, port, location, status, stages, load)
+        self.server_info = dict()
 
     def get(self, key):
         with self.lock:
