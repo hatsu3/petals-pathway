@@ -71,6 +71,14 @@ class DistributedHashTable:
         with self.lock:
             for i in count():
                 if i not in self.server_info:
+                    self.server_info[i] = {
+                        'ip': None,
+                        'port': None,
+                        'location': None,
+                        'status': None,
+                        'stages': None,
+                        'load': None
+                    }
                     return i
 
     """
