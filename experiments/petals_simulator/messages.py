@@ -1,4 +1,5 @@
 import uuid
+import time
 
 from geopy import Point
 
@@ -15,6 +16,9 @@ class InferRequest:
 
         self.task_name = task_name
         
+        # timestamp is for request scheduing
+        self.timestamp = time.time() * 1e3 # a float number expressed in millieseconds
+
         # The index of the next stage to execute, initialized to 0
         # keeps track of the progress of the request
         self.next_stage_idx = 0

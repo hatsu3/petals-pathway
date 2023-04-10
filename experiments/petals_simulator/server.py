@@ -86,11 +86,28 @@ class GPUWorker(threading.Thread):
 
 # A scheduling policy that determines the priority of a task
 class SchedulingPolicy:
-    def __init__(self):
+    def __init__(self, model: MultiTaskModel):
+        self.model = model
+
+    @abstractmethod
+    def calculate_priority(self, task: GPUTask) -> float:
         pass
 
+class SchedulingEstimationPolicy(SchedulingPolicy):
+    def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
+        super.__init__(model)
+        self.profiling_results = profiling_results
+    
+    def estimate_time_to_completion(task: GPUTask):
+        estimation = 0.0
+        next_stage_name = model.get_stage(task.task_name, task.request.next_stage_idx)
+        while next_stage_name != None:
+            estimation += profiling_results.get_latency(next_stage_name)
+            next_stage_name = model.get_next_stage(next_stage_name, task.task_name)
+        return estimation
+    
     def calculate_priority(self, task: GPUTask) -> float:
-        return 0
+        return task.request.timestamp - estimate_time_to_completion(task)
 
 
 # A thread that prioritizes tasks based on the scheduling policy
@@ -145,7 +162,8 @@ class ConnectionHandler(threading.Thread):
 # A routing policy that determines which downstream server to send a request to
 # based on information from the DHT
 class RoutingPolicy:
-    def __init__(self, dht: DistributedHashTable, update_interval: int):
+    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int):
+        self.model = model
         self.dht = dht
         self.update_interval = update_interval
         self.last_update = 0
@@ -153,7 +171,8 @@ class RoutingPolicy:
 
     def route(self, request: InferRequest) -> int:
         # Get all servers currently serving needed stage
-        possible_servers = dht.get_servers_with_stage(request.stage_index);
+        # TODO: index the stage
+        possible servers = dht.get_servers_with_stage(model.get_stage(request.task_name, request.next_stage_idx))
         # Return the server with the smallest load
         possible_servers.sort(key = lambda x: x.load_level())
         return possible_servers[0]
