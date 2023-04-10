@@ -274,7 +274,7 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
         capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage)) for stage in stages}
-        average_load = len(stages) / self.dht.get_number_of_servers
+        average_load = len(stages) / self.dht.get_number_of_servers()
         while average_load > len(current_stages):
             candidate = min(capabilities, key=capabilities.get)
             current_stages.append(candidate)
