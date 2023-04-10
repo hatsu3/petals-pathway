@@ -126,7 +126,7 @@ class MultiTaskModel:
         if len(self.paths) != len(paths):
             raise ValueError("Task names must be unique")
 
-        if set(self.stages) != set([
+        if set(self.stages.values()) != set([
             stage for path in self.paths.values()
             for stage in path.stages
         ]):

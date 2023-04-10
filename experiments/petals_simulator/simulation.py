@@ -8,6 +8,7 @@ from dht import DistributedHashTable
 from stage_profiler import StageProfiler
 from multitask_model import MultiTaskModel, Stage
 from latency_estimator import LatencyEstimator, generate_random_location
+from utils import get_dummy_model_and_prof_results
 
 
 class Simulator:
@@ -48,7 +49,7 @@ def run_simulation():
     server_sel_policy = ServerSelectionPolicy(dht)
     sched_policy = SchedulingPolicy(model)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
-    stage_assign_policy = StageAssignmentPolicy(dht)
+    stage_assign_policy = StageAssignmentPolicy(model, dht)
 
     num_servers = 10
     num_clients = 10
