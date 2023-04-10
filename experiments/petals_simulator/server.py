@@ -288,8 +288,25 @@ class DHTAnnouncer(threading.Thread):
         self.server = server
         self.announce_interval = announce_interval
 
+    """
+    Let the DHT know of the current status of this server.
+    """
     def _announce(self):
-        pass
+        # List all the information that potentially needs to be sent to DHT
+        server_id = server.server_id
+        # TODO: Figure out what to do about the IP and the port
+        server_location = server.location
+        server_status = server.status
+        server_hosted_stages = server.hosted_stages
+        server_load_level = server.load_level()
+
+        # Let the DHT know about the status of the server, the hosted stages,
+        # and the current load level
+        # TODO: Do we need to also update the information about the location,
+        # the ID of the server, etc.
+        self.dht.put((server_id, "status"), server_status)
+        self.dht.put((server_id, "stages"), server_hosted_stages)
+        self.dht.put((server_id, "load"), server_load_level)
 
     def run(self):
         while True:
