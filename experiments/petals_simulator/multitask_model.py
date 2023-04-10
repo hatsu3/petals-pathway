@@ -166,7 +166,7 @@ class MultiTaskModel:
         return self.routing_table[stage_name][task_name]
 
     # return the stage_idx-th stage of the task
-    def get_stage(self, task_name: str, stage_idx: int):
+    def get_stage(self, task_name: str, stage_idx: int) -> Stage:
         if task_name not in self.paths:
             raise ValueError(f"Task {task_name} does not exist")
         

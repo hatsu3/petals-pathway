@@ -8,11 +8,11 @@ from typing import Tuple
 
 from geopy import Point
 
-from .server import Server
-from .dht import DistributedHashTable
-from .multitask_model import MultiTaskModel
-from .messages import InferRequest, InferResponse
-from .latency_estimator import LatencyEstimator
+from server import Server
+from dht import DistributedHashTable
+from multitask_model import MultiTaskModel
+from messages import InferRequest, InferResponse
+from latency_estimator import LatencyEstimator
 
 
 class RequestMode(Enum):
