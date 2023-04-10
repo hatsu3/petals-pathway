@@ -28,17 +28,17 @@ class ServerSelectionPolicy:
         self.dht = dht
 
     """
-    Choose the server that can serve the first stage of the new request. Return
-    the IP of the server and the port.
+    Choose the server that can serve the first stage of the new request. 
+    Return the index of the best server
     """
-    def choose_server(self, request: InferRequest) -> Tuple[str, int]:
+    def choose_server(self, request: InferRequest) -> int:
         # Pick the next stage of the model that is currently running.
         next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
         # Find all the servers serving that stage.
-        possible_servers = self.dht.get_servers_with_stage(next_stage)
+        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
         # Find the server with smallest current load, and return its IP and port.
         possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
-        return self.dht.get_server_ip_port(possible_servers[0])
+        return possible_servers[0]
 
     def update(self):
         pass
@@ -46,10 +46,10 @@ class ServerSelectionPolicy:
 
 # NOTE: for now we assume that a client only requests one task repeatedly
 class AsyncClient:
-    SEND_START_PORT = 9000
-    RECV_START_PORT = 10000
-
     def __init__(self, 
+                 ip: str,
+                 send_port: int,
+                 recv_port: int,
                  client_id: int, 
                  location: Point, 
                  task_name: str,
@@ -61,6 +61,9 @@ class AsyncClient:
                  request_avg_interval=5, 
                  update_interval=10):
         
+        self.ip = ip
+        self.send_port = send_port
+        self.recv_port = recv_port
         self.client_id = client_id
         self.location = location
         self.task_name = task_name
@@ -74,14 +77,6 @@ class AsyncClient:
         
         self.pending_requests = set()
         self.is_running = True
-
-    @property
-    def send_port(self):
-        return self.SEND_START_PORT + self.client_id
-
-    @property
-    def recv_port(self):
-        return self.RECV_START_PORT + self.client_id
     
     def get_request_interval(self):
         if self.request_mode == RequestMode.UNIFORM:
@@ -96,9 +91,9 @@ class AsyncClient:
     Send an already created request to the server designated by `server_ip` and
     `server_port`.
     """
-    async def send_request(self, server_ip: str, server_port: int, request: InferRequest):
+    async def send_request(self, server_id: int, request: InferRequest):
         # Simulate communication latency
-        server_id = server_port - Server.START_PORT
+        server_ip, server_port = self.dht.get_server_ip_port(server_id)
         server_location = self.dht.get_server_location(server_id)
         comm_latency = self.latency_est.predict(self.location, server_location)
         await asyncio.sleep(comm_latency)
@@ -129,8 +124,8 @@ class AsyncClient:
             # Get the server id from the port number of the server
             remote_addr = writer.get_extra_info('peername')
             assert remote_addr is not None
-            server_port = remote_addr[1]
-            server_id = server_port - Server.START_PORT
+            server_ip, server_port = remote_addr
+            server_id = self.dht.get_server_id_by_ip_port(server_ip, server_port)
 
             # Parse the response and notify the client
             response = InferResponse.from_json(json.loads(data.decode("utf-8")))
@@ -150,12 +145,12 @@ class AsyncClient:
             self.pending_requests.add(request_id)
 
             # Use the ID to build a `Request` object.
-            request = InferRequest(request_id, "localhost", self.recv_port, self.location, self.task_name)
+            request = InferRequest(request_id, self.ip, self.recv_port, self.location, self.task_name)
 
             # Select the server that will receive new request.
-            server_ip, server_port = self.server_sel_policy.choose_server(request)
+            server_id = self.server_sel_policy.choose_server(request)
 
-            asyncio.create_task(self.send_request(server_ip, server_port, request))
+            asyncio.create_task(self.send_request(server_id, request))
 
             await asyncio.sleep(self.get_request_interval())
 

@@ -4,7 +4,6 @@ import time
 from geopy import Point
 
 
-# TODO: make this a dataclass
 # A request to run a task in the multi-task model
 # initialized with the IP address of the client and the task ID
 class InferRequest:

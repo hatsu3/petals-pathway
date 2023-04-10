@@ -176,9 +176,8 @@ class RoutingPolicy:
 
     def route(self, request: InferRequest) -> int:
         # Get all servers currently serving needed stage
-        # TODO: index the stage
         next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-        possible_servers = self.dht.get_servers_with_stage(next_stage)
+        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
         # Return the server with the smallest load
         possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
         return possible_servers[0]
@@ -206,9 +205,10 @@ class RequestRouter(threading.Thread):
 
         self.connections = {}   # connection with downstream servers
 
-    def _connect(self, server_id: int, port: int):
+    def _connect(self, server_id: int):
+        server_ip, server_port = self.dht.get_server_ip_port(server_id)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect(('localhost', port))
+        sock.connect((server_ip, server_port))
         self.connections[server_id] = sock
 
     # TODO: disconnect from servers that are down or ...
@@ -253,7 +253,7 @@ class RequestRouter(threading.Thread):
             # Determine the downstream server and send the request
             server_id = self.routing_policy.route(task.request)
             if server_id not in self.connections:
-                self._connect(server_id, Server.START_PORT + server_id)
+                self._connect(server_id)
             sock = self.connections[server_id]
 
             # Simulate communication latency
@@ -265,7 +265,7 @@ class RequestRouter(threading.Thread):
         
 
 class StageAssignmentPolicy:
-    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):  # TODO: server info
+    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):
         self.model = model
         self.dht = dht
 
@@ -277,7 +277,7 @@ class StageAssignmentPolicy:
 class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
-        capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage)) for stage in stages}
+        capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
         average_load = len(stages) / self.dht.get_number_of_servers()
         while average_load > len(current_stages):
             # pick the stage with the least number of servers
@@ -290,8 +290,8 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
 class DHTAnnouncer(threading.Thread):
     def __init__(self, server: "Server", dht: DistributedHashTable, announce_interval: float):
         super().__init__()
-        self.dht = dht
         self.server = server
+        self.dht = dht
         self.announce_interval = announce_interval
 
     """
@@ -299,20 +299,14 @@ class DHTAnnouncer(threading.Thread):
     """
     def _announce(self):
         # List all the information that potentially needs to be sent to DHT
+        # NOTE: For now, we simply refresh all the information every time (at least it does not hurt)
         server_id = self.server.server_id
-        # TODO: Figure out what to do about the IP and the port
-        server_location = self.server.location
-        server_status = self.server.status
-        server_hosted_stages = self.server.hosted_stages
-        server_load_level = self.server.load_level
-
-        # Let the DHT know about the status of the server, the hosted stages,
-        # and the current load level
-        # TODO: Do we need to also update the information about the location,
-        # the ID of the server, etc.
-        self.dht.put((server_id, "status"), server_status)
-        self.dht.put((server_id, "stages"), server_hosted_stages)
-        self.dht.put((server_id, "load"), server_load_level)
+        self.dht.put((server_id, "ip"), self.server.ip)
+        self.dht.put((server_id, "port"), self.server.port)
+        self.dht.put((server_id, "location"), self.server.location)
+        self.dht.put((server_id, "status"), self.server.status)
+        self.dht.put((server_id, "stages"), self.server.hosted_stages)
+        self.dht.put((server_id, "load"), self.server.load_level)
 
     def run(self):
         while True:
@@ -330,9 +324,10 @@ class StageRebalancer(threading.Thread):
 
     def run(self):
         while True:
-            stage_ids = []  # TODO: calculate using self.server.hosted_stages
+            stage_ids = []
             new_stages = self.stage_assignment_policy.assign_stages(stage_ids)
-            # TODO: install new stages and remove old stages
+            self.hosted_stages = new_stages
+            self.dht.put((self.server.server_id, "stages"), self.hosted_stages)
             time.sleep(self.rebalance_interval)
 
 
@@ -341,13 +336,14 @@ class ServerStatus(Enum):
     ONLINE = 1
 
 
+# TODO: each server pick a unique id by negotiating with the DHT
 # A server that potentially hosts multiple stages of the multi-task model
 # We assume that the server has a single GPU that can only execute one stage at a time
 # Each server is assigned a virtual location to simulate the communication latency between servers
-class Server:
-    START_PORT = 8000
-    
+class Server:    
     def __init__(self, 
+                 ip: str,
+                 port: int,
                  server_id: int, 
                  location: Point,
                  dht: DistributedHashTable,
@@ -361,6 +357,8 @@ class Server:
                  routing_policy: RoutingPolicy, 
                  stage_assignment_policy: StageAssignmentPolicy):
         
+        self.ip = ip
+        self.port = port
         self.server_id = server_id
         self.location = location
         self.dht = dht
@@ -386,7 +384,7 @@ class Server:
 
         # requests -> connection handler -> task pool
         self.connection_handler = ConnectionHandler(
-            port=Server.START_PORT + server_id, 
+            port=self.port, 
             task_pool=self.task_pool,
             model=self.model,
             prof_results=self.prof_results,

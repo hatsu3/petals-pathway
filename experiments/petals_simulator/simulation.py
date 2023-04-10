@@ -57,6 +57,8 @@ def run_simulation():
     servers = list()
     for i in range(num_servers):
         servers.append(Server(
+            ip="127.0.0.1",
+            port=8000 + i,
             server_id=i,
             location=generate_random_location(),
             dht=dht,
@@ -74,6 +76,9 @@ def run_simulation():
     clients = list()
     for i in range(num_clients):
         clients.append(AsyncClient(
+            ip="127.0.0.1",
+            send_port=9000 + i,
+            recv_port=10000 + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),

@@ -10,7 +10,6 @@ from sklearn.linear_model import LinearRegression
 from geopy import Point
 from geopy.distance import great_circle
 
-# TODO: load network latency dataset (e.g. RIPE Atlas, CAIDA)
 
 def load_verizon_dataset():
     # central locations of regions

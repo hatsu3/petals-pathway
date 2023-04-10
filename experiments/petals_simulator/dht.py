@@ -3,8 +3,8 @@ import threading
 from geopy import Point
 from multitask_model import Stage
 
-# TODO: add a reverse lookup table: stage -> server_id (replicas)
-# TODO: we could add more utility functions to this class
+
+# TODO: rethink the design of server ID. what if two servers have the same ID?
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
 
@@ -69,7 +69,7 @@ class DistributedHashTable:
     the stage they need right now, for a task they are executing. This method
     allows for that by returning the set of such servers.
     """
-    def get_servers_with_stage(self, desired_stage: Stage) -> list[int]:
+    def get_servers_with_stage(self, stage_name: str) -> list[int]:
         # TODO: Is using the lock necessary here? If we mess up, and return a
         # server that does not in fact serve the given stage, we should be fine
         # since the server will have a timeout, and just try again.
@@ -77,7 +77,7 @@ class DistributedHashTable:
         with self.lock:
             for server in self.server_info:
                 stages_served = server["stages"]
-                if desired_stage.name in stages_served:
+                if stage_name in stages_served:
                     output.append(server)
         return output
 
@@ -93,6 +93,13 @@ class DistributedHashTable:
 
     def get_server_ip_port(self, server_id: int):
         return self.get((server_id, 'ip')), self.get((server_id, 'port'))
+    
+    def get_server_id_by_ip_port(self, ip, port):
+        with self.lock:
+            for server_id, server_info in self.server_info.items():
+                if server_info['ip'] == ip and server_info['port'] == port:
+                    return server_id
+        return None
 
     def to_json(self):
         with self.lock:
