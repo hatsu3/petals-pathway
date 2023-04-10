@@ -91,6 +91,9 @@ class DistributedHashTable:
     def get_server_load(self, server_id: int):
         return self.get((server_id, 'load'))
 
+    def get_server_ip_port(self, server_id: int):
+        return self.get((server_id, 'ip')), self.get((server_id, 'port'))
+
     def to_json(self):
         with self.lock:
             return copy.deepcopy(self.server_info)

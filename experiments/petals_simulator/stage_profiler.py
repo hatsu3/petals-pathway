@@ -20,8 +20,8 @@ def _profile_module(module, input_shape, batch_size, num_warmup=10, num_repeats=
         # Measure the latency using CUDA events
         latencies = []
         for i in range(num_repeats):
-            start_event = torch.cuda.Event(enable_timing=True)
-            end_event = torch.cuda.Event(enable_timing=True)
+            start_event = torch.cuda.Event(enable_timing=True)  # type: ignore
+            end_event = torch.cuda.Event(enable_timing=True)  # type: ignore
 
             start_event.record() # type: ignore
             for j in range(num_iters):

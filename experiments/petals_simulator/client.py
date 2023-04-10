@@ -23,21 +23,22 @@ class RequestMode(Enum):
 # Policy for selecting which server in the swarm to send a request to
 # options: random, closest, least loaded, etc.
 class ServerSelectionPolicy:
-    def __init__(self, dht: DistributedHashTable):
+    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):
+        self.model = model
         self.dht = dht
 
     """
     Choose the server that can serve the first stage of the new request. Return
     the IP of the server and the port.
     """
-    def choose_server(self, model: MultiTaskModel, request: InferRequest) -> Tuple[str, int]:
+    def choose_server(self, request: InferRequest) -> Tuple[str, int]:
         # Pick the next stage of the model that is currently running.
         next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
         # Find all the servers serving that stage.
         possible_servers = self.dht.get_servers_with_stage(next_stage)
         # Find the server with smallest current load, and return its IP and port.
         possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
-        return possible_servers[0].ip, possible_servers[0].port
+        return self.dht.get_server_ip_port(possible_servers[0])
 
     def update(self):
         pass
@@ -95,7 +96,7 @@ class AsyncClient:
     Send an already created request to the server designated by `server_ip` and
     `server_port`.
     """
-    async def send_request(self, server_ip, server_port, request):
+    async def send_request(self, server_ip: str, server_port: int, request: InferRequest):
         # Simulate communication latency
         server_id = server_port - Server.START_PORT
         server_location = self.dht.get_server_location(server_id)
@@ -115,9 +116,9 @@ class AsyncClient:
                 if response != "OK": 
                     print(f"Received error response from entry server {server_id}")
             except socket.timeout:
-                print(f"Request {request_id} timed out")
+                print(f"Request {request.request_id} timed out")
 
-        print(f"Request {request_id} sent to server {server_id}")
+        print(f"Request {request.request_id} sent to server {server_id}")
 
     async def connection_handler(self, reader, writer):
         while self.is_running:
@@ -152,7 +153,7 @@ class AsyncClient:
             request = InferRequest(request_id, "localhost", self.recv_port, self.location, self.task_name)
 
             # Select the server that will receive new request.
-            server_ip, server_port = self.server_sel_policy.choose_server(self.model, request)
+            server_ip, server_port = self.server_sel_policy.choose_server(request)
 
             asyncio.create_task(self.send_request(server_ip, server_port, request))
 

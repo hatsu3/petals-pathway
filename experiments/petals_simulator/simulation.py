@@ -46,7 +46,7 @@ def run_simulation():
     model, prof_results = get_dummy_model_and_prof_results()
     latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
 
-    server_sel_policy = ServerSelectionPolicy(dht)
+    server_sel_policy = ServerSelectionPolicy(model, dht)
     sched_policy = SchedulingPolicy(model)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
     stage_assign_policy = StageAssignmentPolicy(model, dht)
