@@ -330,7 +330,6 @@ class StageRebalancer(threading.Thread):
             time.sleep(self.rebalance_interval)
 
 
-# TODO: each server pick a unique id by negotiating with the DHT
 # A server that potentially hosts multiple stages of the multi-task model
 # We assume that the server has a single GPU that can only execute one stage at a time
 # Each server is assigned a virtual location to simulate the communication latency between servers
@@ -338,7 +337,6 @@ class Server:
     def __init__(self, 
                  ip: str,
                  port: int,
-                 server_id: int, 
                  location: Point,
                  dht: DistributedHashTable,
                  model: MultiTaskModel,
@@ -353,7 +351,6 @@ class Server:
         
         self.ip = ip
         self.port = port
-        self.server_id = server_id
         self.location = location
         self.dht = dht
         self.model = model
@@ -363,6 +360,7 @@ class Server:
         self.rebalance_interval = rebalance_interval
         self.num_router_threads = num_router_threads
         
+        self.server_id = self.dht.get_new_server_id()
         self.hosted_stages: list[str] = list()
         
         # policies controlling the behavior of the server

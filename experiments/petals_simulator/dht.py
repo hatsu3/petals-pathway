@@ -1,10 +1,10 @@
 import copy
+from itertools import count
 import threading
 from geopy import Point
 from multitask_model import Stage
 
 
-# TODO: rethink the design of server ID. what if two servers have the same ID?
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
 
@@ -63,6 +63,15 @@ class DistributedHashTable:
             else:
                 # Delete a specific piece of information of a server
                 del self.server_info[server_id][info_type]
+
+    # generate an id for a new server
+    # return the smallest integer that is not used as a server id
+    # note that some server ids may be deleted, and we will reuse them
+    def get_new_server_id(self):
+        with self.lock:
+            for i in count():
+                if i not in self.server_info:
+                    return i
 
     """
     Servers often need to contact DHT in order to get a list of servers serving

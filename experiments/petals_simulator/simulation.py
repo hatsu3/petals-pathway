@@ -59,7 +59,6 @@ def run_simulation():
         servers.append(Server(
             ip="127.0.0.1",
             port=8000 + i,
-            server_id=i,
             location=generate_random_location(),
             dht=dht,
             model=model,
