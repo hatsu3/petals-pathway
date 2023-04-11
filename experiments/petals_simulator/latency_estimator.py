@@ -10,6 +10,7 @@ from sklearn.linear_model import LinearRegression
 from geopy import Point
 from geopy.distance import great_circle
 
+import logging
 
 def load_verizon_dataset():
     # central locations of regions
@@ -91,7 +92,9 @@ class LatencyEstimator:
         if self._estimator is None:
             raise ValueError("Please fit the estimator first.")
         distance = great_circle(src, dst).miles
-        return self._estimator.predict(np.array([[distance]]))[0]
+        prediction = self._estimator.predict(np.array([[distance]]))[0][0]
+        logging.debug(f"{type(prediction)}.")
+        return prediction
     
     def score(self, distances, latencies):
         if self._estimator is None:

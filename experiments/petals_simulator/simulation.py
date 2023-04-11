@@ -2,7 +2,7 @@ import random
 import threading
 import time
 
-from server import RoutingPolicy, SchedulingPolicy, Server, StageAssignmentPolicy
+from server import RoutingPolicy, SchedulingPolicy, Server, StageAssignmentPolicy, BaselineStageAssignmentPolicy
 from client import Client, RequestMode, ServerSelectionPolicy
 from dht import DistributedHashTable
 from stage_profiler import StageProfiler
@@ -51,10 +51,10 @@ def run_simulation():
     server_sel_policy = ServerSelectionPolicy(model, dht)
     sched_policy = SchedulingPolicy(model)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
-    stage_assign_policy = StageAssignmentPolicy(model, dht)
+    stage_assign_policy = BaselineStageAssignmentPolicy(model, dht)
 
-    num_servers = 10
-    num_clients = 10
+    num_servers = 1
+    num_clients = 1
 
     servers = list()
     for i in range(num_servers):

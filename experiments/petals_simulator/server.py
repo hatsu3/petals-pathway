@@ -77,11 +77,11 @@ class GPUWorker(threading.Thread):
     
     def run(self):
         while True:
-            task = self.priority_queue.get()
+            priority, task = self.priority_queue.get()
             if task is None:  # Exit signal
                 break
             thread_id = threading.get_ident()
-            print(f"Worker thread {thread_id} executing task {task.args}")
+            logging.info(f"Worker thread {thread_id} executing task {task.args}")
             task.execute()
             self.completed_queue.put(task)
 
@@ -181,9 +181,13 @@ class RoutingPolicy:
         # Get all servers currently serving needed stage
         next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
         possible_servers = self.dht.get_servers_with_stage(next_stage.name)
-        # Return the server with the smallest load
-        possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
-        return possible_servers[0]
+
+        if len(possible_servers) > 0:
+            # Return the server with the smallest load
+            possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
+            return possible_servers[0]
+        else:
+            return -1
     
     def _update(self):
         pass
@@ -255,6 +259,11 @@ class RequestRouter(threading.Thread):
 
             # Determine the downstream server and send the request
             server_id = self.routing_policy.route(task.request)
+            
+            if server_id < 0:
+                time.sleep(1)
+                continue
+
             if server_id not in self.connections:
                 self._connect(server_id)
             sock = self.connections[server_id]
@@ -441,10 +450,6 @@ class Server:
     def stop(self):
         logging.info(f"Server {self.server_id} is stopping.")
 
-        assert self.server_id is not None
-        self.dht.delete_server(self.server_id)
-        self.hosted_stages.clear()
-
         # set the shared flag to stop all threads
         self.is_running = False
 
@@ -456,6 +461,11 @@ class Server:
             router.join()
         self.dht_announcer.join()
         self.stage_rebalancer.join()
+
+        assert self.server_id is not None
+        logging.debug("Stopping server accessing dht.")
+        self.dht.delete_server(self.server_id)
+        self.hosted_stages.clear()
 
         logging.info(f"Server {self.server_id} stopped.")
 

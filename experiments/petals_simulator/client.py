@@ -37,9 +37,13 @@ class ServerSelectionPolicy:
         next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
         # Find all the servers serving that stage.
         possible_servers = self.dht.get_servers_with_stage(next_stage.name)
-        # Find the server with smallest current load, and return its IP and port.
-        possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
-        return possible_servers[0]
+
+        if len(possible_servers) > 0:
+            # Find the server with smallest current load, and return its IP and port.
+            possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
+            return possible_servers[0]
+        else:
+            return -1
 
     def update(self):
         pass
@@ -150,6 +154,8 @@ class Client:
 
             # Create a new request ID and add it to pending requests set.
             request_id = uuid.uuid4()
+
+            # TODO: retry for pending_requests (timeout & server not found)
             self.pending_requests.add(request_id)
 
             # Use the ID to build a `Request` object.
@@ -158,7 +164,8 @@ class Client:
             # Select the server that will receive new request.
             server_id = self.server_sel_policy.choose_server(request)
 
-            self.send_request(server_id, request)
+            if server_id >= 0:
+                self.send_request(server_id, request)
 
             time.sleep(self.get_request_interval())
 

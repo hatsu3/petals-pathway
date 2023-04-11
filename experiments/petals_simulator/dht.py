@@ -94,9 +94,9 @@ class DistributedHashTable:
         # since the server will have a timeout, and just try again.
         output = list()
         with self.lock:
-            for server in self.server_info:
-                stages_served = server["stages"]
-                if stage_name in stages_served:
+            for server, info in self.server_info.items():
+                stages_served = info["stages"]
+                if stages_served != None and stage_name in stages_served:
                     output.append(server)
         return output
 
