@@ -10,6 +10,8 @@ from multitask_model import MultiTaskModel, Stage
 from latency_estimator import LatencyEstimator, generate_random_location
 from utils import get_dummy_model_and_prof_results
 
+import logging
+
 
 class Simulator:
     def __init__(self, servers: list[Server], clients: list[Client]):
@@ -92,3 +94,6 @@ def run_simulation():
 
     simulator = Simulator(servers, clients)
     simulator.run()
+
+logging.basicConfig(level=logging.INFO)
+run_simulation()

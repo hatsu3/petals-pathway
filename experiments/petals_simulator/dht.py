@@ -73,6 +73,8 @@ class DistributedHashTable:
         with self.lock:
             for i in count():
                 if i not in self.server_info:
+                    # TODO: a more elegant approach to solve this concurrency bug?
+                    self.add_server(i)
                     return i
 
     """

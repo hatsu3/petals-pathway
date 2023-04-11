@@ -433,7 +433,10 @@ class Server:
         self.stage_rebalancer.start()
 
         assert self.server_id is not None
-        self.dht.add_server(self.server_id)
+
+        # TODO: a more elegant approach to solve this concurrency bug?
+        # self.dht.add_server(self.server_id)
+
         init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
         self.hosted_stages = init_stages
 
