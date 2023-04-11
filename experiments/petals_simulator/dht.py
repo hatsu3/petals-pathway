@@ -6,6 +6,7 @@ import logging
 
 from geopy import Point
 
+
 class ServerStatus(Enum):
     OFFLINE = 0
     ONLINE = 1
