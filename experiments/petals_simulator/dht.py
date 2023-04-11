@@ -4,6 +4,7 @@ import threading
 
 from geopy import Point
 
+import logging
 
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
@@ -70,11 +71,20 @@ class DistributedHashTable:
     # return the smallest integer that is not used as a server id
     # note that some server ids may be deleted, and we will reuse them
     def get_new_server_id(self):
+        logging.debug(f"Getting new server id...")
         with self.lock:
             for i in count():
                 if i not in self.server_info:
+                    logging.debug(f"Found a new server id {i}.")
                     # TODO: a more elegant approach to solve this concurrency bug?
-                    self.add_server(i)
+                    self.server_info[i] = {
+                        'ip': None,
+                        'port': None,
+                        'location': None,
+                        'status': None,
+                        'stages': None,
+                        'load': None
+                    }
                     return i
 
     """
