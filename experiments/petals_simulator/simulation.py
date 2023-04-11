@@ -95,5 +95,5 @@ def run_simulation():
     simulator = Simulator(servers, clients)
     simulator.run()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 run_simulation()

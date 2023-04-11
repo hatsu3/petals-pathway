@@ -2,9 +2,9 @@ import copy
 from enum import Enum
 from itertools import count
 import threading
+import logging
 
 from geopy import Point
-
 
 class ServerStatus(Enum):
     OFFLINE = 0
@@ -52,11 +52,14 @@ class DistributedHashTable:
     # the status will be turned to ONLINE when the server first updates its info
     def register_server(self) -> int:
         with self.lock:
+
             # Find the first available server_id
+            logging.debug(f"Getting new server id...")
             server_id = 0
             for server_id in count():
                 if server_id not in self.server_info:
                     break
+            logging.debug(f"Found a new server id {i}.")
 
             self.server_info[server_id] = {
                 'ip': None,
@@ -78,7 +81,6 @@ class DistributedHashTable:
 
             # Delete the entire server entry
             del self.server_info[server_id]
-
 
     """
     Servers often need to contact DHT in order to get a list of servers serving
