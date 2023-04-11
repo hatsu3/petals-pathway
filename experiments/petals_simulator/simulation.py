@@ -29,7 +29,7 @@ class Simulator:
 
         # Start the client threads
         client_threads = [
-            threading.Thread(target=client.run)  # TODO: stop client after a certain time
+            threading.Thread(target=client.run, args=(30,))  # TODO: stop client after a certain time
             for client in self.clients
         ]
         for client_thread in client_threads:
