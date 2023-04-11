@@ -1,8 +1,8 @@
 import copy
 from itertools import count
 import threading
+
 from geopy import Point
-from multitask_model import Stage
 
 
 # NOTE: currently we do not simulate latency in updating and querying the DHT
@@ -14,55 +14,57 @@ class DistributedHashTable:
         self.lock = threading.Lock()
         self.server_info = dict()
 
-    def get(self, key):
+    # get specific information of a server
+    def get_server_info(self, server_id: int, info_type: str):
         with self.lock:
-            server_id, info_type = key
+            if server_id not in self.server_info:
+                raise Exception('Server does not exist')
             
+            if info_type not in self.INFO_TYPES:
+                raise Exception('Invalid info type')
+
+            return self.server_info[server_id][info_type]
+
+    # get all information of a server
+    def get_server_info_all(self, server_id: int):
+        with self.lock:
+            return copy.deepcopy(self.server_info[server_id])
+
+    # modify specific information of a server
+    def modify_server_info(self, server_id: int, info_type: str, value):
+        with self.lock:
+            if server_id not in self.server_info:
+                raise Exception('Server does not exist')
+        
+            if info_type not in self.INFO_TYPES:
+                raise Exception('Invalid info type')
+
+            # Update the specific information of an existing server
+            self.server_info[server_id][info_type] = value
+
+    # initialize a new server entry in the DHT
+    def add_server(self, server_id: int):
+        with self.lock:
+            if server_id in self.server_info:
+                raise Exception('Server already exists')
+            else:
+                self.server_info[server_id] = {
+                    'ip': None,
+                    'port': None,
+                    'location': None,
+                    'status': None,
+                    'stages': None,
+                    'load': None
+                }
+
+    # delete a server entry from the DHT
+    def delete_server(self, server_id: int):
+        with self.lock:            
             if server_id not in self.server_info:
                 raise Exception('Server does not exist')
 
-            if info_type is None:
-                return self.server_info[server_id]
-            else:
-                return self.server_info[server_id][info_type]
-
-    def put(self, key, value):
-        with self.lock:
-            server_id, info_type = key
-
-            if server_id not in self.server_info:
-                if info_type is None:
-                    # Create a new server entry with default values
-                    self.server_info[server_id] = {
-                        'ip': None,
-                        'port': None,
-                        'location': None,
-                        'status': None,
-                        'stages': None,
-                        'load': None
-                    }
-                else:
-                    raise Exception('Server does not exist')
-            else:
-                if info_type is None:
-                    raise Exception('Server already exists')
-                else:
-                    # Update the specific information of an existing server
-                    self.server_info[server_id][info_type] = value
-
-    def delete(self, key):
-        with self.lock:
-            server_id, info_type = key
-            
-            if server_id not in self.server_info:
-                raise Exception('Server does not exist')
-
-            if info_type is None:
-                # Delete the entire server entry
-                del self.server_info[server_id]
-            else:
-                # Delete a specific piece of information of a server
-                del self.server_info[server_id][info_type]
+            # Delete the entire server entry
+            del self.server_info[server_id]
 
     # generate an id for a new server
     # return the smallest integer that is not used as a server id
@@ -71,14 +73,6 @@ class DistributedHashTable:
         with self.lock:
             for i in count():
                 if i not in self.server_info:
-                    self.server_info[i] = {
-                        'ip': None,
-                        'port': None,
-                        'location': None,
-                        'status': None,
-                        'stages': None,
-                        'load': None
-                    }
                     return i
 
     """
@@ -99,17 +93,17 @@ class DistributedHashTable:
         return output
 
     def get_server_location(self, server_id: int) -> Point:
-        return self.get((server_id, 'location'))
+        return self.get_server_info(server_id, 'location')
 
     def get_number_of_servers(self):
         with self.lock:
             return len(self.server_info)
     
     def get_server_load(self, server_id: int):
-        return self.get((server_id, 'load'))
+        return self.get_server_info(server_id, 'load')
 
     def get_server_ip_port(self, server_id: int):
-        return self.get((server_id, 'ip')), self.get((server_id, 'port'))
+        return self.get_server_info(server_id, 'ip'), self.get_server_info(server_id, 'port')
     
     def get_server_id_by_ip_port(self, ip, port):
         with self.lock:

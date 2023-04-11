@@ -303,11 +303,12 @@ class DHTAnnouncer(threading.Thread):
         # List all the information that potentially needs to be sent to DHT
         # NOTE: For now, we simply refresh all the information every time (at least it does not hurt)
         server_id = self.server.server_id
-        self.dht.put((server_id, "ip"), self.server.ip)
-        self.dht.put((server_id, "port"), self.server.port)
-        self.dht.put((server_id, "location"), self.server.location)
-        self.dht.put((server_id, "stages"), self.server.hosted_stages)
-        self.dht.put((server_id, "load"), self.server.load_level)
+        assert server_id is not None
+        self.dht.modify_server_info(server_id, "ip", self.server.ip)
+        self.dht.modify_server_info(server_id, "port", self.server.port)
+        self.dht.modify_server_info(server_id, "location", self.server.location)
+        self.dht.modify_server_info(server_id, "stages", self.server.hosted_stages)
+        self.dht.modify_server_info(server_id, "load", self.server.load_level)
 
     def run(self):
         while True:
@@ -328,7 +329,8 @@ class StageRebalancer(threading.Thread):
             stage_ids = []
             new_stages = self.stage_assignment_policy.assign_stages(stage_ids)
             self.hosted_stages = new_stages
-            self.dht.put((self.server.server_id, "stages"), self.hosted_stages)
+            assert self.server.server_id is not None
+            self.dht.modify_server_info(self.server.server_id, "stages", self.hosted_stages)
             time.sleep(self.rebalance_interval)
 
 
@@ -446,9 +448,11 @@ class Server:
 
     # Called when the server leaves the swarm
     def leave(self):
+        assert self.server_id is not None
+        
         logging.info("Server {self.server_id} is leaving the swarm.")
 
-        self.dht.delete((self.server_id, None))
+        self.dht.delete_server(self.server_id)
         self.hosted_stages.clear()
 
         logging.info("Server {self.server_id} left the swarm.")
