@@ -89,6 +89,8 @@ class Client:
             raise ValueError(f"Invalid request mode: {self.request_mode}")
     
     def send_request(self, server_id: int, request: InferRequest):
+        logging.info(f"Client {self.client_id} is sending server {server_id} request {request.request_id} .")
+
         # Simulate communication latency
         server_ip, server_port = self.dht.get_server_ip_port(server_id)
         server_location = self.dht.get_server_location(server_id)
@@ -106,11 +108,11 @@ class Client:
             try:
                 response = sock.recv(1024).decode("utf-8")
                 if response != "OK": 
-                    print(f"Received error response from entry server {server_id}")
+                    logging.warning(f"Client {self.client_id} received error response from entry server {server_id} for request {request.request_id}.")
             except socket.timeout:
-                print(f"Request {request.request_id} timed out")
+                logging.warning(f"Client {self.client_id} sending to server {server_id} request {request.request_id} timed out.")
 
-        print(f"Request {request.request_id} sent to server {server_id}")
+        logging.info(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
 
     def receive_responses(self):
         while self.is_running:
@@ -127,7 +129,7 @@ class Client:
                 # Parse the response and notify the client
                 response = InferResponse.from_json(json.loads(data.decode("utf-8")))
                 self.pending_requests.remove(response.request_id)
-                print(f"Received response {response.request_id} from server {server_id}")
+                logging.info(f"Client {self.client_id} received response from server {server_id} for request {response.request_id}.")
 
             except queue.Empty:
                 continue

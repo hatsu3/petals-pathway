@@ -354,7 +354,7 @@ class Server:
                  routing_policy: RoutingPolicy, 
                  stage_assignment_policy: StageAssignmentPolicy):
         
-        logging.info("A new Server is being initiated.")
+        logging.info(f"A new Server is being initiated.")
 
         # server's configurations
         self.ip = ip
@@ -411,14 +411,14 @@ class Server:
         # e.g. if some servers went offline, the remaining servers may be assigned more stages
         self.stage_rebalancer = StageRebalancer(self)
 
-        logging.info("Server {self.server_id} initiated.")
+        logging.info(f"Server {self.server_id} initiated.")
 
     @property
     def load_level(self):
         return self.task_pool.qsize()
 
     def start(self):
-        logging.info("Server {self.server_id} is starting.")
+        logging.info(f"Server {self.server_id} is starting.")
         
         # set the shared flag to start all threads
         self.is_running = True
@@ -437,10 +437,10 @@ class Server:
         init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
         self.hosted_stages = init_stages
 
-        logging.info("Server {self.servre_id} started.")
+        logging.info(f"Server {self.servre_id} started.")
 
     def stop(self):
-        logging.info("Server {self.server_id} is stopping.")
+        logging.info(f"Server {self.server_id} is stopping.")
 
         assert self.server_id is not None
         self.dht.delete_server(self.server_id)
@@ -458,7 +458,7 @@ class Server:
         self.dht_announcer.join()
         self.stage_rebalancer.join()
 
-        logging.info("Server {self.server_id} stopped.")
+        logging.info(f"Server {self.server_id} stopped.")
 
     def run(self, run_time: float):
         self.start()
