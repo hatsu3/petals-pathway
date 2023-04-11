@@ -59,7 +59,7 @@ class DistributedHashTable:
             for server_id in count():
                 if server_id not in self.server_info:
                     break
-            logging.debug(f"Found a new server id {i}.")
+            logging.debug(f"Found a new server id {server_id}.")
 
             self.server_info[server_id] = {
                 'ip': None,
