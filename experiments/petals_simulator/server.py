@@ -70,10 +70,11 @@ class GPUTask:
 # Simulates a GPU executing tasks one at a time
 # Refer to ModuleContainer for subclassing threading.Thread
 class GPUWorker(threading.Thread):
-    def __init__(self, priority_queue: queue.PriorityQueue, completed_queue: queue.Queue):
+    def __init__(self, server: "Server"):
         super().__init__()
-        self.priority_queue = priority_queue
-        self.completed_queue = completed_queue
+        self.server = server
+        self.priority_queue = server.priority_queue
+        self.completed_queue = server.completed_tasks
     
     def run(self):
         while True:
@@ -118,11 +119,12 @@ class SchedulingEstimationPolicy(SchedulingPolicy):
 
 # A thread that prioritizes tasks based on the scheduling policy
 class RequestPriortizer(threading.Thread):
-    def __init__(self, task_pool: queue.Queue, priority_queue: queue.PriorityQueue, sched_policy: SchedulingPolicy):
+    def __init__(self, server: "Server"):
         super().__init__()
-        self.task_pool = task_pool
-        self.priority_queue = priority_queue
-        self.sched_policy = sched_policy
+        self.server = server
+        self.task_pool = server.task_pool
+        self.priority_queue = server.priority_queue
+        self.sched_policy = server.sched_policy
 
     def run(self):
         while True:
@@ -138,12 +140,13 @@ class RequestPriortizer(threading.Thread):
 # A thread that handles incoming connections from clients
 # deserialized tasks and adds them to the task queue
 class ConnectionHandler(threading.Thread):
-    def __init__(self, port: int, task_pool: queue.Queue, model: MultiTaskModel, prof_results: ProfilingResults):
+    def __init__(self, server: "Server"):
         super().__init__()
-        self.task_pool = task_pool
-        self.port = port
-        self.model = model
-        self.prof_results = prof_results
+        self.server = server
+        self.task_pool = server.task_pool
+        self.port = server.port
+        self.model = server.model
+        self.prof_results = server.prof_results
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -194,15 +197,15 @@ class RoutingPolicy:
 
 
 class RequestRouter(threading.Thread):
-    def __init__(self, completed_queue: queue.Queue, routing_policy: RoutingPolicy, latency_est: LatencyEstimator, 
-                 my_location: Point, dht: DistributedHashTable, model: MultiTaskModel):
+    def __init__(self, server: "Server"):
         super().__init__()
-        self.completed_queue = completed_queue
-        self.routing_policy = routing_policy
-        self.latency_est = latency_est
-        self.my_location = my_location
-        self.dht = dht
-        self.model = model
+        self.server = server
+        self.completed_queue = server.completed_tasks
+        self.routing_policy = server.routing_policy
+        self.latency_est = server.latency_est
+        self.my_location = server.location
+        self.dht = server.dht
+        self.model = server.model
 
         self.connections = {}   # connection with downstream servers
 
@@ -289,11 +292,11 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
 
 
 class DHTAnnouncer(threading.Thread):
-    def __init__(self, server: "Server", dht: DistributedHashTable, announce_interval: float):
+    def __init__(self, server: "Server"):
         super().__init__()
         self.server = server
-        self.dht = dht
-        self.announce_interval = announce_interval
+        self.dht = server.dht
+        self.announce_interval = server.announce_interval
 
     """
     Let the DHT know of the current status of this server.
@@ -316,12 +319,12 @@ class DHTAnnouncer(threading.Thread):
 
 
 class StageRebalancer(threading.Thread):
-    def __init__(self, server: "Server", dht: DistributedHashTable, stage_assignment_policy: StageAssignmentPolicy, rebalance_interval: float):
+    def __init__(self, server: "Server"):
         super().__init__()
-        self.dht = dht
         self.server = server
-        self.stage_assignment_policy = stage_assignment_policy
-        self.rebalance_interval = rebalance_interval
+        self.dht = server.dht
+        self.stage_assignment_policy = server.stage_assignment_policy
+        self.rebalance_interval = server.rebalance_interval
 
     def run(self):
         while True:
@@ -336,7 +339,7 @@ class StageRebalancer(threading.Thread):
 # A server that potentially hosts multiple stages of the multi-task model
 # We assume that the server has a single GPU that can only execute one stage at a time
 # Each server is assigned a virtual location to simulate the communication latency between servers
-class Server:    
+class Server:
     def __init__(self, 
                  ip: str,
                  port: int,
@@ -352,6 +355,7 @@ class Server:
                  routing_policy: RoutingPolicy, 
                  stage_assignment_policy: StageAssignmentPolicy):
         
+        # server's configurations
         self.ip = ip
         self.port = port
         self.location = location
@@ -363,87 +367,58 @@ class Server:
         self.rebalance_interval = rebalance_interval
         self.num_router_threads = num_router_threads
         
-        self.server_id = self.dht.get_new_server_id()
-        self.hosted_stages: list[str] = list()
-        
         # policies controlling the behavior of the server
         self.sched_policy = sched_policy
         self.routing_policy = routing_policy
         self.stage_assignment_policy = stage_assignment_policy
+
+        # the server's id and the stages it hosts
+        self.server_id = self.dht.get_new_server_id()
+        self.hosted_stages: list[str] = list()
         
         # queues for communication between threads
         self.task_pool = queue.Queue()
         self.priority_queue = queue.PriorityQueue()
         self.completed_tasks = queue.Queue()
 
+        # shared flag for signaling child threads
+        self.is_running = False
+
+        """ child threads """
+        
         # requests -> connection handler -> task pool
-        self.connection_handler = ConnectionHandler(
-            port=self.port, 
-            task_pool=self.task_pool,
-            model=self.model,
-            prof_results=self.prof_results,
-        )
+        self.connection_handler = ConnectionHandler(self)
 
         # task pool -> request priortizer -> priority queue
-        self.request_priortizer = RequestPriortizer(
-            task_pool=self.task_pool, 
-            priority_queue=self.priority_queue, 
-            sched_policy=self.sched_policy
-        )
+        self.request_priortizer = RequestPriortizer(self)
 
         # priority queue -> gpu worker -> completed queue
-        self.gpu_worker = GPUWorker(
-            priority_queue=self.priority_queue, 
-            completed_queue=self.completed_tasks
-        )
+        self.gpu_worker = GPUWorker(self)
 
         # completed queue -> request router -> downstream servers
         self.request_routers = [
-            RequestRouter(
-                completed_queue=self.completed_tasks,
-                routing_policy=self.routing_policy,
-                latency_est=self.latency_est,
-                my_location=self.location,
-                dht=self.dht,
-                model=self.model,
-            )
+            RequestRouter(self)
             for _ in range(self.num_router_threads)
         ]
 
         # in the background, periodically announce the server's information to the DHT
         # e.g. the stages hosted by the server, the server's status and load level, etc.
-        self.dht_announcer = DHTAnnouncer(
-            server=self,
-            dht=self.dht, 
-            announce_interval=self.announce_interval
-        )
+        self.dht_announcer = DHTAnnouncer(self)
 
         # in the background, periodically rebalance the stages across the servers
         # e.g. if a server is overloaded, it may be assigned fewer stages
         # e.g. if some servers went offline, the remaining servers may be assigned more stages
-        self.stage_rebalancer = StageRebalancer(
-            server=self,
-            dht=self.dht,
-            stage_assignment_policy=self.stage_assignment_policy,
-            rebalance_interval=self.rebalance_interval
-        )
+        self.stage_rebalancer = StageRebalancer(self)
 
     @property
     def load_level(self):
         return self.task_pool.qsize()
 
-    # Called when the server joins the swarm
-    def join(self):
-        init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
-        self.hosted_stages = init_stages
-
-    # Called when the server leaves the swarm
-    def leave(self):
-        assert self.server_id is not None
-        self.dht.delete_server(self.server_id)
-        self.hosted_stages.clear()
-
     def start(self):
+        # set the shared flag to start all threads
+        self.is_running = True
+
+        # start all threads
         self.connection_handler.start()
         self.request_priortizer.start()
         self.gpu_worker.start()
@@ -452,8 +427,20 @@ class Server:
         self.dht_announcer.start()
         self.stage_rebalancer.start()
 
+        assert self.server_id is not None
+        self.dht.add_server(self.server_id)
+        init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
+        self.hosted_stages = init_stages
+
     def stop(self):
-        # TODO: send a signal to all threads to stop
+        assert self.server_id is not None
+        self.dht.delete_server(self.server_id)
+        self.hosted_stages.clear()
+
+        # set the shared flag to stop all threads
+        self.is_running = False
+
+        # wait for all threads to finish
         self.connection_handler.join()
         self.request_priortizer.join()
         self.gpu_worker.join()
@@ -464,9 +451,7 @@ class Server:
 
     def run(self, run_time: float):
         self.start()
-        self.join()
 
         if run_time > 0:
             time.sleep(run_time)
-            self.leave()
             self.stop()
