@@ -16,6 +16,7 @@ from stage_profiler import ProfilingResults
 
 from abc import abstractmethod
 
+import logging
 
 def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
     latency = prof_results.get_latency(stage.name, batch_size)
@@ -350,6 +351,8 @@ class Server:
                  routing_policy: RoutingPolicy, 
                  stage_assignment_policy: StageAssignmentPolicy):
         
+        logging.info("A new Server is being initiated.")
+
         self.ip = ip
         self.port = port
         self.location = location
@@ -426,21 +429,33 @@ class Server:
             rebalance_interval=self.rebalance_interval
         )
 
+        logging.info("Server {self.server_id} initiated.")
+
     @property
     def load_level(self):
         return self.task_pool.qsize()
 
     # Called when the server joins the swarm
     def join(self):
+        logging.info("Server {self.server_id} is joining the swarm.")
+
         init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
         self.hosted_stages = init_stages
+        
+        logging.info("Server {self.server_id} joined the swarm.")
 
     # Called when the server leaves the swarm
     def leave(self):
+        logging.info("Server {self.server_id} is leaving the swarm.")
+
         self.dht.delete((self.server_id, None))
         self.hosted_stages.clear()
 
+        logging.info("Server {self.server_id} left the swarm.")
+
     def start(self):
+        logging.info("Server {self.server_id} is starting.")
+
         self.connection_handler.start()
         self.request_priortizer.start()
         self.gpu_worker.start()
@@ -449,7 +464,11 @@ class Server:
         self.dht_announcer.start()
         self.stage_rebalancer.start()
 
+        logging.info("Server {self.servre_id} started.")
+
     def stop(self):
+        logging.info("Server {self.server_id} is stopping.")
+
         # TODO: send a signal to all threads to stop
         self.connection_handler.join()
         self.request_priortizer.join()
@@ -458,6 +477,8 @@ class Server:
             router.join()
         self.dht_announcer.join()
         self.stage_rebalancer.join()
+
+        logging.info("Server {self.server_id} stopped.")
 
     def run(self, run_time: float):
         self.start()
