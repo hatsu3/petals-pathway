@@ -11,7 +11,7 @@ from geopy import Point
 
 from multitask_model import MultiTaskModel, Stage
 from latency_estimator import LatencyEstimator
-from dht import DistributedHashTable
+from dht import DistributedHashTable, ServerStatus
 from messages import InferRequest, InferResponse
 from stage_profiler import ProfilingResults
 
@@ -310,6 +310,7 @@ class DHTAnnouncer(threading.Thread):
         self.dht.modify_server_info(server_id, "location", self.server.location)
         self.dht.modify_server_info(server_id, "stages", self.server.hosted_stages)
         self.dht.modify_server_info(server_id, "load", self.server.load_level)
+        self.dht.modify_server_info(server_id, "status", ServerStatus.ONLINE)
 
     def run(self):
         while True:
@@ -374,7 +375,7 @@ class Server:
         self.stage_assignment_policy = stage_assignment_policy
 
         # the server's id and the stages it hosts
-        self.server_id = self.dht.get_new_server_id()
+        self.server_id = self.dht.register_server()
         self.hosted_stages: list[str] = list()
         
         # queues for communication between threads
@@ -432,15 +433,10 @@ class Server:
         self.dht_announcer.start()
         self.stage_rebalancer.start()
 
-        assert self.server_id is not None
-
-        # TODO: a more elegant approach to solve this concurrency bug?
-        # self.dht.add_server(self.server_id)
-
         init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
         self.hosted_stages = init_stages
 
-        logging.info(f"Server {self.servre_id} started.")
+        logging.info(f"Server {self.server_id} started.")
 
     def stop(self):
         logging.info(f"Server {self.server_id} is stopping.")

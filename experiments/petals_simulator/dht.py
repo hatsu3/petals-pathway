@@ -1,14 +1,20 @@
 import copy
+from enum import Enum
 from itertools import count
 import threading
 
 from geopy import Point
 
 
+class ServerStatus(Enum):
+    OFFLINE = 0
+    ONLINE = 1
+
+
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
 
-    INFO_TYPES = ['ip', 'port', 'location', 'stages', 'load']
+    INFO_TYPES = ['ip', 'port', 'location', 'stages', 'load', 'status']
 
     def __init__(self):
         self.lock = threading.Lock()
@@ -43,19 +49,26 @@ class DistributedHashTable:
             self.server_info[server_id][info_type] = value
 
     # initialize a new server entry in the DHT
-    def add_server(self, server_id: int):
+    # the status will be turned to ONLINE when the server first updates its info
+    def register_server(self) -> int:
         with self.lock:
-            if server_id in self.server_info:
-                raise Exception('Server already exists')
-            else:
-                self.server_info[server_id] = {
-                    'ip': None,
-                    'port': None,
-                    'location': None,
-                    'status': None,
-                    'stages': None,
-                    'load': None
-                }
+            # Find the first available server_id
+            server_id = 0
+            for server_id in count():
+                if server_id not in self.server_info:
+                    break
+
+            self.server_info[server_id] = {
+                'ip': None,
+                'port': None,
+                'location': None,
+                'status': None,
+                'stages': None,
+                'load': None,
+                'status': ServerStatus.OFFLINE
+            }
+
+            return server_id
 
     # delete a server entry from the DHT
     def delete_server(self, server_id: int):
@@ -66,16 +79,6 @@ class DistributedHashTable:
             # Delete the entire server entry
             del self.server_info[server_id]
 
-    # generate an id for a new server
-    # return the smallest integer that is not used as a server id
-    # note that some server ids may be deleted, and we will reuse them
-    def get_new_server_id(self):
-        with self.lock:
-            for i in count():
-                if i not in self.server_info:
-                    # TODO: a more elegant approach to solve this concurrency bug?
-                    self.add_server(i)
-                    return i
 
     """
     Servers often need to contact DHT in order to get a list of servers serving
