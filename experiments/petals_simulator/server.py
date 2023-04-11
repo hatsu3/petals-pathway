@@ -95,6 +95,7 @@ class SchedulingPolicy:
     def calculate_priority(self, task: GPUTask) -> float:
         pass
 
+
 class SchedulingEstimationPolicy(SchedulingPolicy):
     def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
         super().__init__(model)

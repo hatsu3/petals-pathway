@@ -1,14 +1,14 @@
+import queue
 import socket
-import asyncio
 import json
 import uuid
 import random
 from enum import Enum
-from typing import Tuple
+import threading
+import time
 
 from geopy import Point
 
-from server import Server
 from dht import DistributedHashTable
 from multitask_model import MultiTaskModel
 from messages import InferRequest, InferResponse
@@ -44,8 +44,7 @@ class ServerSelectionPolicy:
         pass
 
 
-# NOTE: for now we assume that a client only requests one task repeatedly
-class AsyncClient:
+class Client:
     def __init__(self, 
                  ip: str,
                  send_port: int,
@@ -75,9 +74,10 @@ class AsyncClient:
         self.request_avg_interval = request_avg_interval
         self.update_interval = update_interval
         
-        self.pending_requests = set()
         self.is_running = True
-    
+        self.pending_requests = set()
+        self.response_queue = queue.Queue()
+
     def get_request_interval(self):
         if self.request_mode == RequestMode.UNIFORM:
             return self.request_avg_interval
@@ -86,17 +86,13 @@ class AsyncClient:
             return random.expovariate(1 / self.request_avg_interval)
         else:
             raise ValueError(f"Invalid request mode: {self.request_mode}")
-
-    """
-    Send an already created request to the server designated by `server_ip` and
-    `server_port`.
-    """
-    async def send_request(self, server_id: int, request: InferRequest):
+    
+    def send_request(self, server_id: int, request: InferRequest):
         # Simulate communication latency
         server_ip, server_port = self.dht.get_server_ip_port(server_id)
         server_location = self.dht.get_server_location(server_id)
         comm_latency = self.latency_est.predict(self.location, server_location)
-        await asyncio.sleep(comm_latency)
+        time.sleep(comm_latency)
 
         # Get the actual bytes from the request.
         request_bytes = json.dumps(request.to_json()).encode("utf-8")
@@ -115,29 +111,38 @@ class AsyncClient:
 
         print(f"Request {request.request_id} sent to server {server_id}")
 
-    async def connection_handler(self, reader, writer):
+    def receive_responses(self):
         while self.is_running:
-            data = await reader.read(1024)
-            if not data:
-                break
+            try:
+                conn, addr = self.response_queue.get(timeout=1)
+                data = conn.recv(1024)
+                if not data:
+                    break
 
-            # Get the server id from the port number of the server
-            remote_addr = writer.get_extra_info('peername')
-            assert remote_addr is not None
-            server_ip, server_port = remote_addr
-            server_id = self.dht.get_server_id_by_ip_port(server_ip, server_port)
+                # Get the server id from the port number of the server
+                server_ip, server_port = addr
+                server_id = self.dht.get_server_id_by_ip_port(server_ip, server_port)
 
-            # Parse the response and notify the client
-            response = InferResponse.from_json(json.loads(data.decode("utf-8")))
-            self.pending_requests.remove(response.request_id)
-            print(f"Received response {response.request_id} from server {server_id}")
+                # Parse the response and notify the client
+                response = InferResponse.from_json(json.loads(data.decode("utf-8")))
+                self.pending_requests.remove(response.request_id)
+                print(f"Received response {response.request_id} from server {server_id}")
 
-    async def start_server(self):
-        server = await asyncio.start_server(self.connection_handler, host='0.0.0.0', port=self.recv_port)
-        async with server:
-            await server.serve_forever()
+            except queue.Empty:
+                continue
 
-    async def periodic_request(self):
+    def connection_handler(self):
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.bind(('0.0.0.0', self.recv_port))
+        server_socket.listen(1)
+
+        while self.is_running:
+            conn, addr = server_socket.accept()
+            self.response_queue.put((conn, addr))
+
+        server_socket.close()
+
+    def send_requests(self):
         while self.is_running:
 
             # Create a new request ID and add it to pending requests set.
@@ -150,22 +155,30 @@ class AsyncClient:
             # Select the server that will receive new request.
             server_id = self.server_sel_policy.choose_server(request)
 
-            asyncio.create_task(self.send_request(server_id, request))
+            self.send_request(server_id, request)
 
-            await asyncio.sleep(self.get_request_interval())
+            time.sleep(self.get_request_interval())
 
-    async def update_server_sel_policy(self):
+    def update_server_sel_policy(self):
         while self.is_running:
             self.server_sel_policy.update()
-            await asyncio.sleep(self.update_interval)
+            time.sleep(self.update_interval)
 
-    async def run(self):
-        await asyncio.gather(
-            self.periodic_request(),
-            self.update_server_sel_policy(),
-            self.start_server(),
-            return_exceptions=True
-        )
+    def run(self):
+        request_thread = threading.Thread(target=self.send_requests)
+        listener_thread = threading.Thread(target=self.connection_handler)
+        response_thread = threading.Thread(target=self.receive_responses)
+        update_policy_thread = threading.Thread(target=self.update_server_sel_policy)
+
+        request_thread.start()
+        listener_thread.start()
+        response_thread.start()
+        update_policy_thread.start()
+
+        request_thread.join()
+        listener_thread.join()
+        response_thread.join()
+        update_policy_thread.join()
 
     def stop(self):
         self.is_running = False
