@@ -18,10 +18,10 @@ class Simulator:
         self.servers = servers
         self.clients = clients
 
-    def run(self):
+    def run(self, server_run_time: int = 30, client_run_time: int = 30):
         # Start the server thread
         server_threads = [
-            threading.Thread(target=server.run, args=(30,))  # run for 30 seconds
+            threading.Thread(target=server.run, args=(server_run_time,))
             for server in self.servers
         ]
         for server_thread in server_threads:
@@ -29,7 +29,7 @@ class Simulator:
 
         # Start the client threads
         client_threads = [
-            threading.Thread(target=client.run, args=(30,))  # TODO: stop client after a certain time
+            threading.Thread(target=client.run, args=(client_run_time,))
             for client in self.clients
         ]
         for client_thread in client_threads:
@@ -95,5 +95,7 @@ def run_simulation():
     simulator = Simulator(servers, clients)
     simulator.run()
 
-logging.basicConfig(level=logging.DEBUG)
-run_simulation()
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    run_simulation()
