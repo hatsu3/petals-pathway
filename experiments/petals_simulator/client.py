@@ -164,7 +164,7 @@ class Client:
             self.server_sel_policy.update()
             time.sleep(self.update_interval)
 
-    def run(self):
+    def run(self, run_time: float):
         request_thread = threading.Thread(target=self.send_requests)
         listener_thread = threading.Thread(target=self.connection_handler)
         response_thread = threading.Thread(target=self.receive_responses)
@@ -174,6 +174,10 @@ class Client:
         listener_thread.start()
         response_thread.start()
         update_policy_thread.start()
+
+        if run_time > 0:
+            time.sleep(run_time)
+            self.stop()
 
         request_thread.join()
         listener_thread.join()

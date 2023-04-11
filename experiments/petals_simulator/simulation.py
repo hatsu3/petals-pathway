@@ -3,7 +3,7 @@ import threading
 import time
 
 from server import RoutingPolicy, SchedulingPolicy, Server, StageAssignmentPolicy
-from client import AsyncClient, RequestMode, ServerSelectionPolicy
+from client import Client, RequestMode, ServerSelectionPolicy
 from dht import DistributedHashTable
 from stage_profiler import StageProfiler
 from multitask_model import MultiTaskModel, Stage
@@ -12,7 +12,7 @@ from utils import get_dummy_model_and_prof_results
 
 
 class Simulator:
-    def __init__(self, servers: list[Server], clients: list[AsyncClient]):
+    def __init__(self, servers: list[Server], clients: list[Client]):
         self.servers = servers
         self.clients = clients
 
@@ -74,7 +74,7 @@ def run_simulation():
 
     clients = list()
     for i in range(num_clients):
-        clients.append(AsyncClient(
+        clients.append(Client(
             ip="127.0.0.1",
             send_port=9000 + i,
             recv_port=10000 + i,

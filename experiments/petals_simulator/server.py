@@ -462,6 +462,8 @@ class Server:
     def run(self, run_time: float):
         self.start()
         self.join()
-        time.sleep(run_time)
-        self.leave()
-        self.stop()
+
+        if run_time > 0:
+            time.sleep(run_time)
+            self.leave()
+            self.stop()
