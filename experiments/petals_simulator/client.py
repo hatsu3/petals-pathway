@@ -99,7 +99,8 @@ class Client:
         server_ip, server_port = self.dht.get_server_ip_port(server_id)
         server_location = self.dht.get_server_location(server_id)
         comm_latency = self.latency_est.predict(self.location, server_location)
-        time.sleep(comm_latency)
+        logging.debug(f"Predicted communication latency: {comm_latency}.")
+        time.sleep(comm_latency / 1000)
 
         # Get the actual bytes from the request.
         request_bytes = json.dumps(request.to_json()).encode("utf-8")
@@ -108,7 +109,7 @@ class Client:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((server_ip, server_port))
             sock.sendall(request_bytes)
-            sock.settimeout(1)
+            sock.settimeout(5)
             try:
                 response = sock.recv(1024).decode("utf-8")
                 if response != "OK": 

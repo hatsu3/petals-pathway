@@ -76,7 +76,7 @@ class GPUWorker(threading.Thread):
         self.completed_queue = server.completed_tasks
     
     def run(self):
-        while True:
+        while self.server.is_running:
             priority, task = self.priority_queue.get()
             if task is None:  # Exit signal
                 break
@@ -126,7 +126,7 @@ class RequestPriortizer(threading.Thread):
         self.sched_policy = server.sched_policy
 
     def run(self):
-        while True:
+        while self.server.is_running:
             task = self.task_pool.get()
             if task is None:  # Propagate exit signal
                 self.priority_queue.put(None)
@@ -151,12 +151,13 @@ class ConnectionHandler(threading.Thread):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(('localhost', self.port))
             sock.listen()
-            while True:
+            while self.server.is_running:
                 conn, addr = sock.accept()
                 request_json = conn.recv(1024).decode().strip()
                 if not request_json:  # Exit signal
                     break
                 request = InferRequest.from_json(json.loads(request_json))
+                logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
                 stage = self.model.get_stage(request.task_name, request.next_stage_idx)
                 task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
                 self.task_pool.put(task)
@@ -238,7 +239,7 @@ class RequestRouter(threading.Thread):
             sock.sendall(json.dumps(response.to_json()).encode())
 
     def run(self):
-        while True:
+        while self.server.is_running:
             # Periodically update the routing policy
             self.routing_policy.update_if_needed()
             
@@ -266,14 +267,20 @@ class RequestRouter(threading.Thread):
 
             if server_id not in self.connections:
                 self._connect(server_id)
-            sock = self.connections[server_id]
+            
+            if server_id != self.server.server_id:
+                sock = self.connections[server_id]
 
-            # Simulate communication latency
-            server_location = self.dht.get_server_location(server_id)
-            self._simulate_comm_latency(server_location)
+                # Simulate communication latency
+                server_location = self.dht.get_server_location(server_id)
+                self._simulate_comm_latency(server_location)
 
-            # Forward the request to the downstream server
-            sock.sendall(json.dumps(request.to_json()).encode())
+                # Forward the request to the downstream server
+                sock.sendall(json.dumps(request.to_json()).encode())
+            else:
+                stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+                task = GPUTask(request, "simulated_execution", args=(stage, 1, self.server.prof_results))
+                self.server.task_pool.put(task)
         
 
 class StageAssignmentPolicy:
@@ -322,7 +329,7 @@ class DHTAnnouncer(threading.Thread):
         self.dht.modify_server_info(server_id, "status", ServerStatus.ONLINE)
 
     def run(self):
-        while True:
+        while self.server.is_running:
             self._announce()
             time.sleep(self.announce_interval)
 
@@ -336,7 +343,7 @@ class StageRebalancer(threading.Thread):
         self.rebalance_interval = server.rebalance_interval
 
     def run(self):
-        while True:
+        while self.server.is_running:
             stage_ids = []
             new_stages = self.stage_assignment_policy.assign_stages(stage_ids)
             self.hosted_stages = new_stages
