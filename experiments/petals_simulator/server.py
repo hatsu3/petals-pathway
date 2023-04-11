@@ -154,6 +154,7 @@ class ConnectionHandler(threading.Thread):
             while self.server.is_running:
                 conn, addr = sock.accept()
                 request_json = conn.recv(1024).decode().strip()
+                logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
                 if not request_json:  # Exit signal
                     break
                 request = InferRequest.from_json(json.loads(request_json))
@@ -237,6 +238,7 @@ class RequestRouter(threading.Thread):
             sock.connect((request.client_ip, request.client_port))
             response = InferResponse(request, result)
             sock.sendall(json.dumps(response.to_json()).encode())
+        logging.info(f"Server {self.server.server_id} responded to {request.request_id}.")
 
     def run(self):
         while self.server.is_running:

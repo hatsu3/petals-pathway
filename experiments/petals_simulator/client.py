@@ -129,12 +129,12 @@ class Client:
 
                 # Get the server id from the port number of the server
                 server_ip, server_port = addr
-                server_id = self.dht.get_server_id_by_ip_port(server_ip, server_port)
+                # server_id = self.dht.get_server_id_by_ip_port(server_ip, server_port)
 
                 # Parse the response and notify the client
                 response = InferResponse.from_json(json.loads(data.decode("utf-8")))
                 self.pending_requests.remove(response.request_id)
-                logging.info(f"Client {self.client_id} received response from server {server_id} for request {response.request_id}.")
+                logging.info(f"Client {self.client_id} received response from server {server_ip}:{server_port} for request {response.request_id}.")
 
             except queue.Empty:
                 continue
