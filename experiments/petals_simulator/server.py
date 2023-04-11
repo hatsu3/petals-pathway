@@ -1,10 +1,11 @@
-from enum import Enum
 import json
 import queue
 import socket
 import threading
 import time
+import logging
 from typing import Any
+from abc import abstractmethod
 
 from geopy import Point
 
@@ -13,8 +14,6 @@ from latency_estimator import LatencyEstimator
 from dht import DistributedHashTable
 from messages import InferRequest, InferResponse
 from stage_profiler import ProfilingResults
-
-from abc import abstractmethod
 
 
 def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
@@ -355,6 +354,8 @@ class Server:
                  routing_policy: RoutingPolicy, 
                  stage_assignment_policy: StageAssignmentPolicy):
         
+        logging.info("A new Server is being initiated.")
+
         # server's configurations
         self.ip = ip
         self.port = port
@@ -410,11 +411,15 @@ class Server:
         # e.g. if some servers went offline, the remaining servers may be assigned more stages
         self.stage_rebalancer = StageRebalancer(self)
 
+        logging.info("Server {self.server_id} initiated.")
+
     @property
     def load_level(self):
         return self.task_pool.qsize()
 
     def start(self):
+        logging.info("Server {self.server_id} is starting.")
+        
         # set the shared flag to start all threads
         self.is_running = True
 
@@ -432,7 +437,11 @@ class Server:
         init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
         self.hosted_stages = init_stages
 
+        logging.info("Server {self.servre_id} started.")
+
     def stop(self):
+        logging.info("Server {self.server_id} is stopping.")
+
         assert self.server_id is not None
         self.dht.delete_server(self.server_id)
         self.hosted_stages.clear()
@@ -448,6 +457,8 @@ class Server:
             router.join()
         self.dht_announcer.join()
         self.stage_rebalancer.join()
+
+        logging.info("Server {self.server_id} stopped.")
 
     def run(self, run_time: float):
         self.start()

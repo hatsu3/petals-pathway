@@ -14,6 +14,7 @@ from multitask_model import MultiTaskModel
 from messages import InferRequest, InferResponse
 from latency_estimator import LatencyEstimator
 
+import logging
 
 class RequestMode(Enum):
     UNIFORM = 1
