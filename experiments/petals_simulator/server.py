@@ -267,7 +267,7 @@ class RequestRouter(threading.Thread):
                 time.sleep(1)
                 continue
 
-            if server_id not in self.connections:
+            if server_id not in self.connections and server_id != self.server.server_id:
                 self._connect(server_id)
             
             if server_id != self.server.server_id:
