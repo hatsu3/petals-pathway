@@ -18,7 +18,7 @@ class Simulator:
         self.servers = servers
         self.clients = clients
 
-    def run(self, server_run_time: int = 30, client_run_time: int = 30):
+    def run(self, server_run_time: int = 10, client_run_time: int = 10):
         # Start the server thread
         server_threads = [
             threading.Thread(target=server.run, args=(server_run_time,))
@@ -54,13 +54,13 @@ def run_simulation():
     stage_assign_policy = BaselineStageAssignmentPolicy(model, dht)
 
     num_servers = 8
-    num_clients = 4
+    num_clients = 50
 
     servers = list()
     for i in range(num_servers):
         servers.append(Server(
             ip="127.0.0.1",
-            port=29400 + i,
+            port=11000 + i,
             location=generate_random_location(),
             dht=dht,
             model=model,
@@ -79,7 +79,7 @@ def run_simulation():
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            port=19400 + i,
+            port=21000 + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),
@@ -98,4 +98,8 @@ def run_simulation():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
+    with open('trace.json', 'a') as f:
+        f.write(f"[\n")
     run_simulation()
+    with open('trace.json', 'a') as f:
+        f.write(f"]\n")
