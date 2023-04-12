@@ -104,10 +104,10 @@ class SchedulingEstimationPolicy(SchedulingPolicy):
     def estimate_time_to_completion(self, task: GPUTask):
         estimation = 0.0
         task_name = task.request.task_name
-        next_stage_name = self.model.get_stage(task_name, task.request.next_stage_idx - 1).name
-        while next_stage_name != None:
-            next_stage_name = self.model.get_next_stage(next_stage_name, task_name)
-            estimation += self.profiling_results.get_latency(next_stage_name, batch_size=1)
+        stage_name = self.model.get_stage(task_name, task.request.next_stage_idx).name
+        while stage_name is not None:
+            estimation += self.profiling_results.get_latency(stage_name, batch_size=1)
+            stage_name = self.model.get_next_stage(stage_name, task_name)
             
         return estimation
     

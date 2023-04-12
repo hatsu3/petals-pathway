@@ -152,17 +152,25 @@ class MultiTaskModel:
 
     # get the next stage name given the current stage name and task name
     def get_next_stage(self, stage_name: str, task_name: str):
-        if stage_name not in self.routing_table:
+        # check if the stage and task exist
+        if stage_name not in self.stages:
             raise ValueError(f"Stage {stage_name} does not exist")
+    
+        if task_name not in self.paths:
+            raise ValueError(f"Task {task_name} does not exist")
+        
+        # case 1. current stage is the last stage of all tasks containing the stage
+        if stage_name not in self.routing_table:
+            return None
         
         if task_name not in self.routing_table[stage_name]:
-            # case 1. current stage is the last stage of the task
+            # case 2. current stage is the last stage of the specific task
             if self.stages[stage_name] in self.paths[task_name].stages:
                 return None
             else:
                 raise ValueError(f"Task {task_name} does not use stage {stage_name}")
 
-        # case 2. current stage is not the last stage of the task
+        # case 3. current stage is not the last stage of the task
         return self.routing_table[stage_name][task_name]
 
     # return the stage_idx-th stage of the task
