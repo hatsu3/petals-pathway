@@ -9,7 +9,7 @@ class TraceVisualizer:
         
     def __call__(self, func):
         def wrapper(*args, **kwargs):
-            ts = int(time.time() * 1e9)
+            ts = int(time.time() * 1e4)
             func_entry = {
                 'name': func.__name__,
                 'cat': 'function',
@@ -24,7 +24,7 @@ class TraceVisualizer:
 
             result = func(*args, **kwargs)
 
-            ts = int(time.time() * 1e9)
+            ts = int(time.time() * 1e4)
             func_exit = {
                 'name': func.__name__,
                 'cat': 'function',

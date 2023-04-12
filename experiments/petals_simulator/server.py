@@ -9,6 +9,8 @@ from abc import abstractmethod
 
 from geopy import Point
 
+import random
+
 from multitask_model import MultiTaskModel, Stage
 from latency_estimator import LatencyEstimator
 from dht import DistributedHashTable, ServerStatus
@@ -50,6 +52,7 @@ class GPUTask:
 
     # Execute the function and store the result
     # Called by the worker thread
+    @TraceVisualizer(log_file_path='trace.json')
     def execute(self):
         try:
             self.result = self.function(*self.args, **self.kwargs)
@@ -100,6 +103,13 @@ class SchedulingPolicy:
     def calculate_priority(self, task: GPUTask) -> float:
         pass
 
+class BaselineSchedulingPolicy:
+    def __init__(self, model: MultiTaskModel):
+        self.model = model
+
+    @abstractmethod
+    def calculate_priority(self, task: GPUTask) -> float:
+        return random.uniform(0, 100)
 
 class SchedulingEstimationPolicy(SchedulingPolicy):
     def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
