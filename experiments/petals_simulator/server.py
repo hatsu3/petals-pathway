@@ -503,6 +503,8 @@ class Server:
     def stop(self):
         logging.info(f"Server {self.server_id} is stopping.")
 
+        self.dht.delete_server(self.server_id)
+
         # set the shared flag to stop all threads
         self.is_running = False
 
@@ -522,8 +524,6 @@ class Server:
         logging.debug(f"Server {self.server_id} stopped the stage rebalancer.")
 
         assert self.server_id is not None
-        logging.debug("Stopping server accessing dht.")
-        self.dht.delete_server(self.server_id)
         self.hosted_stages.clear()
 
         logging.info(f"Server {self.server_id} stopped.")
