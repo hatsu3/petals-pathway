@@ -212,18 +212,11 @@ class RequestRouter(threading.Thread):
         self.dht = server.dht
         self.model = server.model
 
-        self.connections = {}   # connection with downstream servers
-
     def _connect(self, server_id: int):
         server_ip, server_port = self.dht.get_server_ip_port(server_id)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((server_ip, server_port))
-        self.connections[server_id] = sock
-
-    # TODO: disconnect from servers that are down or ...
-    def _disconnect(self, server_id: int):
-        self.connections[server_id].close()
-        del self.connections[server_id]
+        return sock
 
     def _simulate_comm_latency(self, location: Point):
         comm_latency = self.latency_est.predict(self.my_location, location)
@@ -267,11 +260,8 @@ class RequestRouter(threading.Thread):
                 time.sleep(1)
                 continue
 
-            if server_id not in self.connections and server_id != self.server.server_id:
-                self._connect(server_id)
-            
             if server_id != self.server.server_id:
-                sock = self.connections[server_id]
+                sock = self._connect(server_id)
 
                 # Simulate communication latency
                 server_location = self.dht.get_server_location(server_id)

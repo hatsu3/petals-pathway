@@ -52,8 +52,7 @@ class ServerSelectionPolicy:
 class Client:
     def __init__(self, 
                  ip: str,
-                 send_port: int,
-                 recv_port: int,
+                 port: int,
                  client_id: int, 
                  location: Point, 
                  task_name: str,
@@ -66,8 +65,7 @@ class Client:
                  update_interval=10):
         
         self.ip = ip
-        self.send_port = send_port
-        self.recv_port = recv_port
+        self.port = port
         self.client_id = client_id
         self.location = location
         self.task_name = task_name
@@ -141,7 +139,7 @@ class Client:
 
     def connection_handler(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind(('0.0.0.0', self.recv_port))
+        server_socket.bind(('0.0.0.0', self.port))
         server_socket.listen(1)
 
         while self.is_running:
@@ -160,7 +158,7 @@ class Client:
             self.pending_requests.add(request_id)
 
             # Use the ID to build a `Request` object.
-            request = InferRequest(request_id, self.ip, self.recv_port, self.location, self.task_name)
+            request = InferRequest(request_id, self.ip, self.port, self.location, self.task_name)
 
             # Select the server that will receive new request.
             server_id = self.server_sel_policy.choose_server(request)

@@ -78,8 +78,7 @@ def run_simulation():
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            send_port=9000 + i,
-            recv_port=10000 + i,
+            port=9000 + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),
