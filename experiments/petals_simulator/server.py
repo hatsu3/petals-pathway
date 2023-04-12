@@ -293,7 +293,7 @@ class RequestRouter(threading.Thread):
                 # Forward the request to the downstream server
                 try:
                     sock.sendall(json.dumps(request.to_json()).encode())
-                except socket.ConnectionResetError:
+                except ConnectionResetError:
                     # TODO: fault tolerance
                     continue
             else:
