@@ -15,6 +15,8 @@ from dht import DistributedHashTable, ServerStatus
 from messages import InferRequest, InferResponse
 from stage_profiler import ProfilingResults
 
+from trace_visualizer import TraceVisualizer
+
 
 def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
     latency = prof_results.get_latency(stage.name, batch_size)
@@ -77,7 +79,10 @@ class GPUWorker(threading.Thread):
     
     def run(self):
         while self.server.is_running:
-            priority, task = self.priority_queue.get()
+            try:
+                priority, task = self.priority_queue.get(timeout=5)
+            except queue.Empty:
+                continue
             if task is None:  # Exit signal
                 break
             thread_id = threading.get_ident()
@@ -128,7 +133,10 @@ class RequestPriortizer(threading.Thread):
 
     def run(self):
         while self.server.is_running:
-            task = self.task_pool.get()
+            try:
+                task = self.task_pool.get(timeout=5)
+            except queue.Empty:
+                continue
             if task is None:  # Propagate exit signal
                 self.priority_queue.put(None)
                 break
@@ -152,22 +160,26 @@ class ConnectionHandler(threading.Thread):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(('localhost', self.port))
             sock.listen()
+            sock.settimeout(5.0)
             while self.server.is_running:
-                conn, addr = sock.accept()
-                request_json = conn.recv(1024).decode().strip()
-                logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
-                if not request_json:  # Exit signal
-                    break
-                request = InferRequest.from_json(json.loads(request_json))
-                logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
-                stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-                task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
-                self.task_pool.put(task)
-                
-                # Send a response to the client or the upstream server
-                # this does not indicate completion of the task but rather that the task has been received
-                conn.sendall(b"OK")
-                conn.close()
+                try:
+                    conn, addr = sock.accept()
+                    request_json = conn.recv(1024).decode().strip()
+                    logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
+                    if not request_json:  # Exit signal
+                        break
+                    request = InferRequest.from_json(json.loads(request_json))
+                    logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
+                    stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+                    task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
+                    self.task_pool.put(task)
+                    
+                    # Send a response to the client or the upstream server
+                    # this does not indicate completion of the task but rather that the task has been received
+                    conn.sendall(b"OK")
+                    conn.close()
+                except socket.timeout:
+                    continue
 
 
 # A routing policy that determines which downstream server to send a request to
@@ -242,7 +254,7 @@ class RequestRouter(threading.Thread):
             # Check if there are any completed tasks
             # We avoid blocking the thread because we want to periodically update the routing policy
             try:
-                task: GPUTask = self.completed_queue.get(timeout=0.1)
+                task: GPUTask = self.completed_queue.get(timeout=1)
             except queue.Empty:
                 continue
 
@@ -269,7 +281,11 @@ class RequestRouter(threading.Thread):
                 self._simulate_comm_latency(server_location)
 
                 # Forward the request to the downstream server
-                sock.sendall(json.dumps(request.to_json()).encode())
+                try:
+                    sock.sendall(json.dumps(request.to_json()).encode())
+                except socket.ConnectionResetError:
+                    # TODO: fault tolerance
+                    continue
             else:
                 stage = self.model.get_stage(request.task_name, request.next_stage_idx)
                 task = GPUTask(request, "simulated_execution", args=(stage, 1, self.server.prof_results))
@@ -455,12 +471,18 @@ class Server:
 
         # wait for all threads to finish
         self.connection_handler.join()
+        logging.debug(f"Server {self.server_id} stopped the connection handler.")
         self.request_priortizer.join()
+        logging.debug(f"Server {self.server_id} stopped the request prioritizer.")
         self.gpu_worker.join()
+        logging.debug(f"Server {self.server_id} stopped the gpu worker.")
         for router in self.request_routers:
             router.join()
+        logging.debug(f"Server {self.server_id} stopped the requster routers.")
         self.dht_announcer.join()
+        logging.debug(f"Server {self.server_id} stopped the dht announcer.")
         self.stage_rebalancer.join()
+        logging.debug(f"Server {self.server_id} stopped the stage rebalancer.")
 
         assert self.server_id is not None
         logging.debug("Stopping server accessing dht.")

@@ -18,7 +18,7 @@ class Simulator:
         self.servers = servers
         self.clients = clients
 
-    def run(self, server_run_time: int = 30, client_run_time: int = 30):
+    def run(self, server_run_time: int = 10, client_run_time: int = 10):
         # Start the server thread
         server_threads = [
             threading.Thread(target=server.run, args=(server_run_time,))
@@ -53,14 +53,14 @@ def run_simulation():
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
     stage_assign_policy = BaselineStageAssignmentPolicy(model, dht)
 
-    num_servers = 3
-    num_clients = 2
+    num_servers = 8
+    num_clients = 4
 
     servers = list()
     for i in range(num_servers):
         servers.append(Server(
             ip="127.0.0.1",
-            port=5000 + i,
+            port=29300 + i,
             location=generate_random_location(),
             dht=dht,
             model=model,
@@ -78,7 +78,7 @@ def run_simulation():
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            port=6000 + i,
+            port=19300 + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),
@@ -96,5 +96,5 @@ def run_simulation():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.WARNING)
     run_simulation()

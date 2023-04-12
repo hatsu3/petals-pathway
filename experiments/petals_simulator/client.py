@@ -137,14 +137,21 @@ class Client:
             except queue.Empty:
                 continue
 
+            except socket.timeout:
+                continue
+
     def connection_handler(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind(('0.0.0.0', self.port))
         server_socket.listen(1)
+        server_socket.settimeout(5.0)
 
         while self.is_running:
-            conn, addr = server_socket.accept()
-            self.response_queue.put((conn, addr))
+            try:
+                conn, addr = server_socket.accept()
+                self.response_queue.put((conn, addr))
+            except socket.timeout:
+                continue
 
         server_socket.close()
 
@@ -189,9 +196,13 @@ class Client:
             self.stop()
 
         request_thread.join()
+        logging.debug(f"Client {self.client_id} stopped the request thread.")
         listener_thread.join()
+        logging.debug(f"Client {self.client_id} stopped the listener thread.")
         response_thread.join()
+        logging.debug(f"Client {self.client_id} stopped the response thread.")
         update_policy_thread.join()
+        logging.debug(f"Client {self.client_id} stopped the updating-policy thread.")
 
     def stop(self):
         self.is_running = False
