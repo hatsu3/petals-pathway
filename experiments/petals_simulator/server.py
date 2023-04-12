@@ -223,6 +223,33 @@ class RoutingPolicy:
             self._update()
         self.last_update = time.time()
 
+# Baseline (random) routing policy
+class RandomRoutingPolicy:
+    # Update interval is probably not used, but keeping things uniform
+    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int):
+        self.model = model
+        self.dht = dht
+        self.update_interval = update_interval
+        self.last_update = 0
+        self.update_if_needed()
+
+    def route(self, request: InferRequest) -> int:
+        # Get all servers serving a given stage
+        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
+
+        if len(possible_servers) > 0:
+            # Return random server in the list
+            return random.choice(possible_servers)
+
+    def _update(self):
+        pass
+
+    def update_if_needed(self):
+        current_time = time.time()
+        if current_time - self.last_update > self.update_interval:
+            self._update()
+        self.last_update = time.time()
 
 class RequestRouter(threading.Thread):
     def __init__(self, server: "Server"):
