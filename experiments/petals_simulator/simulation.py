@@ -2,7 +2,7 @@ import random
 import threading
 import time
 
-from server import RoutingPolicy, SchedulingPolicy, Server, StageAssignmentPolicy, BaselineStageAssignmentPolicy
+from server import RoutingPolicy, SchedulingPolicy, SchedulingEstimationPolicy, Server, StageAssignmentPolicy, BaselineStageAssignmentPolicy
 from client import Client, RequestMode, ServerSelectionPolicy
 from dht import DistributedHashTable
 from stage_profiler import StageProfiler
@@ -49,12 +49,12 @@ def run_simulation():
     latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
 
     server_sel_policy = ServerSelectionPolicy(model, dht)
-    sched_policy = SchedulingPolicy(model)
+    sched_policy = SchedulingEstimationPolicy(model, prof_results)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
     stage_assign_policy = BaselineStageAssignmentPolicy(model, dht)
 
-    num_servers = 1
-    num_clients = 1
+    num_servers = 3
+    num_clients = 2
 
     servers = list()
     for i in range(num_servers):
