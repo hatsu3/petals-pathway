@@ -9,7 +9,7 @@ import time
 
 from geopy import Point
 
-from dht import DistributedHashTable
+from dht import DistributedHashTable, ServerNonExistentException
 from multitask_model import MultiTaskModel
 from messages import InferRequest, InferResponse
 from latency_estimator import LatencyEstimator
@@ -90,30 +90,38 @@ class Client:
         else:
             raise ValueError(f"Invalid request mode: {self.request_mode}")
     
-    def send_request(self, server_id: int, request: InferRequest):
-        logging.info(f"Client {self.client_id} is sending server {server_id} request {request.request_id} .")
-
-        # Simulate communication latency
-        server_ip, server_port = self.dht.get_server_ip_port(server_id)
-        server_location = self.dht.get_server_location(server_id)
-        comm_latency = self.latency_est.predict(self.location, server_location)
-        logging.debug(f"Predicted communication latency: {comm_latency}.")
-        time.sleep(comm_latency / 1000)
-
-        # Get the actual bytes from the request.
-        request_bytes = json.dumps(request.to_json()).encode("utf-8")
-        
-        # Send request to the entry server
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((server_ip, server_port))
-            sock.sendall(request_bytes)
-            sock.settimeout(5)
+    def send_request(self, request: InferRequest):
+        while self.is_running:
             try:
-                response = sock.recv(1024).decode("utf-8")
-                if response != "OK": 
-                    logging.warning(f"Client {self.client_id} received error response from entry server {server_id} for request {request.request_id}.")
-            except socket.timeout:
-                logging.warning(f"Client {self.client_id} sending to server {server_id} request {request.request_id} timed out.")
+                server_id = self.server_sel_policy.choose_server(request)
+                logging.info(f"Client {self.client_id} is sending server {server_id} request {request.request_id} .")
+
+                # Simulate communication latency
+                server_ip, server_port = self.dht.get_server_ip_port(server_id)
+                server_location = self.dht.get_server_location(server_id)
+                comm_latency = self.latency_est.predict(self.location, server_location)
+                logging.debug(f"Predicted communication latency: {comm_latency}.")
+                time.sleep(comm_latency / 1000)
+
+                # Get the actual bytes from the request.
+                request_bytes = json.dumps(request.to_json()).encode("utf-8")
+                
+                # Send request to the entry server
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.connect((server_ip, server_port))
+                    sock.sendall(request_bytes)
+                    sock.settimeout(5)
+                    try:
+                        response = sock.recv(1024).decode("utf-8")
+                        if response != "OK": 
+                            logging.warning(f"Client {self.client_id} received error response from entry server {server_id} for request {request.request_id}.")
+                    except socket.timeout:
+                        logging.warning(f"Client {self.client_id} sending to server {server_id} request {request.request_id} timed out.")
+                break
+            except ConnectionRefusedError:
+                continue
+            except ServerNonExistentException:
+                continue
 
         logging.info(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
 
@@ -167,11 +175,11 @@ class Client:
             # Use the ID to build a `Request` object.
             request = InferRequest(request_id, self.ip, self.port, self.location, self.task_name)
 
-            # Select the server that will receive new request.
-            server_id = self.server_sel_policy.choose_server(request)
+            # # Select the server that will receive new request.
+            # server_id = self.server_sel_policy.choose_server(request)
 
-            if server_id >= 0:
-                self.send_request(server_id, request)
+            # if server_id >= 0:
+            self.send_request(request)
 
             time.sleep(self.get_request_interval())
 

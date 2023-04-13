@@ -13,7 +13,7 @@ import random
 
 from multitask_model import MultiTaskModel, Stage
 from latency_estimator import LatencyEstimator
-from dht import DistributedHashTable, ServerStatus
+from dht import DistributedHashTable, ServerStatus, ServerNonExistentException
 from messages import InferRequest, InferResponse
 from stage_profiler import ProfilingResults
 
@@ -83,7 +83,7 @@ class GPUWorker(threading.Thread):
     def run(self):
         while self.server.is_running:
             try:
-                priority, task = self.priority_queue.get(timeout=5)
+                priority, timestamp, task = self.priority_queue.get(timeout=5)
             except queue.Empty:
                 continue
             if task is None:  # Exit signal
@@ -151,7 +151,8 @@ class RequestPriortizer(threading.Thread):
                 self.priority_queue.put(None)
                 break
             priority = self.sched_policy.calculate_priority(task)
-            self.priority_queue.put((priority, task))
+            # add a timestamp to achieve tie-breaking
+            self.priority_queue.put((priority, time.time(), task))
 
 
 # NOTE: currently we do not consider batching and the batch size is always 1
@@ -394,7 +395,10 @@ class StageRebalancer(threading.Thread):
             new_stages = self.stage_assignment_policy.assign_stages(stage_ids)
             self.hosted_stages = new_stages
             assert self.server.server_id is not None
-            self.dht.modify_server_info(self.server.server_id, "stages", self.hosted_stages)
+            try:
+                self.dht.modify_server_info(self.server.server_id, "stages", self.hosted_stages)
+            except ServerNonExistentException:
+                continue
             time.sleep(self.rebalance_interval)
 
 

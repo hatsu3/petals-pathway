@@ -7,6 +7,9 @@ import logging
 from geopy import Point
 
 
+class ServerNonExistentException(Exception):
+    pass
+
 class ServerStatus(Enum):
     OFFLINE = 0
     ONLINE = 1
@@ -25,7 +28,7 @@ class DistributedHashTable:
     def get_server_info(self, server_id: int, info_type: str):
         with self.lock:
             if server_id not in self.server_info:
-                raise Exception('Server does not exist')
+                raise ServerNonExistentException
             
             if info_type not in self.INFO_TYPES:
                 raise Exception('Invalid info type')
