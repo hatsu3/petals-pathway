@@ -3,8 +3,12 @@ from enum import Enum
 from itertools import count
 import threading
 import logging
+import time
+from collections import deque
 
 from geopy import Point
+
+from multitask_model import MultiTaskModel
 
 
 class ServerNonExistentException(Exception):
@@ -17,14 +21,71 @@ class ServerStatus(Enum):
     STOPPING = 2
 
 
+class ExpiringSet:
+    def __init__(self, duration=10):
+        self.duration = duration
+        self.queue = deque()
+        self.list = list()
+
+    def add(self, item):
+        current_time = time.time()
+        self.queue.append((item, current_time))
+        self.list.append(item)
+        self._remove_expired_items()
+
+    def _remove_expired_items(self):
+        current_time = time.time()
+        while self.queue and (current_time - self.queue[0][1]) > self.duration:
+            expired_item, _ = self.queue.popleft()
+            self.list.remove(expired_item)
+
+    def __contains__(self, item):
+        self._remove_expired_items()
+        return item in self.list
+
+    def __repr__(self):
+        self._remove_expired_items()
+        return repr(self.list)
+    
+    def __iter__(self):
+        self._remove_expired_items()
+        return iter(self.list)
+
+
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
 
     INFO_TYPES = ['ip', 'port', 'location', 'stages', 'load', 'status']
 
-    def __init__(self):
+    def __init__(self, model: MultiTaskModel):
         self.lock = threading.Lock()
         self.server_info = dict()
+        self.model = model
+        self.stage_req_rate = ExpiringSet(duration=10)
+
+    def update_stage_req_rate(self, server_stage_req_rate: dict):
+        with self.lock:
+            self.stage_req_rate.add(server_stage_req_rate)
+
+    def get_normalized_stage_req_rate(self):
+        with self.lock:
+            # aggregate the request rate of each stage from all servers
+            stage_req_rate = dict.fromkeys(self.model.stages, 0.0)
+            for server_stage_req_rate in self.stage_req_rate:
+                for stage, rate in server_stage_req_rate.items():
+                    stage_req_rate[stage] += rate
+
+            # edge case: the sum of stage_req_rate is zero, all stages have the same request rate
+            total_req_rate = sum(stage_req_rate.values())
+            if total_req_rate == 0:
+                return {stage: 1/len(self.model.stages) for stage in self.model.stages}
+            
+            # normalize the request rate
+            for stage, rate in stage_req_rate.items():
+                stage_req_rate[stage] = rate / total_req_rate
+            
+            return stage_req_rate
+
 
     # get specific information of a server
     def get_server_info(self, server_id: int, info_type: str):

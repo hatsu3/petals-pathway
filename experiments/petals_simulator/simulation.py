@@ -44,8 +44,8 @@ class Simulator:
 
 
 def run_simulation():
-    dht = DistributedHashTable()
     model, prof_results = get_dummy_model_and_prof_results()
+    dht = DistributedHashTable(model)
     latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
 
     server_sel_policy = ServerSelectionPolicy(model, dht)
@@ -60,7 +60,7 @@ def run_simulation():
     for i in range(num_servers):
         servers.append(Server(
             ip="127.0.0.1",
-            port=15000 + i,
+            port=5000 + i,
             location=generate_random_location(),
             dht=dht,
             model=model,
@@ -79,7 +79,7 @@ def run_simulation():
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            port=25000 + i,
+            port=6000 + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),

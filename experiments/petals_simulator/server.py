@@ -103,6 +103,7 @@ class SchedulingPolicy:
     def calculate_priority(self, task: GPUTask) -> float:
         pass
 
+
 class BaselineSchedulingPolicy:
     def __init__(self, model: MultiTaskModel):
         self.model = model
@@ -110,6 +111,7 @@ class BaselineSchedulingPolicy:
     @abstractmethod
     def calculate_priority(self, task: GPUTask) -> float:
         return random.uniform(0, 100)
+
 
 class SchedulingEstimationPolicy(SchedulingPolicy):
     def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
@@ -181,10 +183,17 @@ class ConnectionHandler(threading.Thread):
                         break
                     request = InferRequest.from_json(json.loads(request_json))
                     logging.debug(f"Server {self.server.server_id} receives request {request.request_id}.")
+                    
+                    # Add the task to the task pool
                     stage = self.model.get_stage(request.task_name, request.next_stage_idx)
                     task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
                     self.task_pool.put(task)
-                    self.server.requets_within_last_interval += 1
+                    
+                    # Update the request count
+                    self.server.request_within_last_interval += 1
+                    if stage.name not in self.server.request_within_last_interval_per_stage:
+                        self.server.request_within_last_interval_per_stage[stage.name] = 0
+                    self.server.request_within_last_interval_per_stage[stage.name] += 1
                     
                     # Send a response to the client or the upstream server
                     # this does not indicate completion of the task but rather that the task has been received
@@ -228,6 +237,7 @@ class RoutingPolicy:
             self._update()
         self.last_update = time.time()
 
+
 # Baseline (random) routing policy
 class RandomRoutingPolicy:
     # Update interval is probably not used, but keeping things uniform
@@ -255,6 +265,7 @@ class RandomRoutingPolicy:
         if current_time - self.last_update > self.update_interval:
             self._update()
         self.last_update = time.time()
+
 
 class RequestRouter(threading.Thread):
     def __init__(self, server: "Server"):
@@ -344,7 +355,7 @@ class RequestRouter(threading.Thread):
                 stage = self.model.get_stage(request.task_name, request.next_stage_idx)
                 task = GPUTask(request, "simulated_execution", args=(stage, 1, self.server.prof_results))
                 self.server.task_pool.put(task)
-        
+
 
 class StageAssignmentPolicy:
     def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):
@@ -409,16 +420,25 @@ class DHTAnnouncer(threading.Thread):
         self.dht.modify_server_info(server_id, "stages", self.server.hosted_stages)
         self.dht.modify_server_info(server_id, "load", sum(self.load_window))
         self.dht.modify_server_info(server_id, "status", ServerStatus.ONLINE)
+        self.dht.update_stage_req_rate(self.server.request_within_last_interval_per_stage)
 
     def run(self):
         while self.server.is_running:
             try:
-                self.load_window.append(self.server.requets_within_last_interval)
+                # Update the load window
+                self.load_window.append(self.server.request_within_last_interval)
                 if len(self.load_window) > self.load_window_size:
                     self.load_window.pop(0)
+                
+                # Announce the current status
+                assert self.server.gpu_worker.ident is not None
                 logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
                 self._announce()
-                self.server.requets_within_last_interval = 0
+                # logging.info(f"Normalized stage request rate: {self.server.dht.get_normalized_stage_req_rate()}")
+
+                # Reset the request counter
+                self.server.request_within_last_interval = 0
+                self.server.request_within_last_interval_per_stage = dict()
             except ServerNonExistentException:
                 continue
 
@@ -493,7 +513,8 @@ class Server:
         self.priority_queue = queue.PriorityQueue()
         self.completed_tasks = queue.Queue()
 
-        self.requets_within_last_interval = 0
+        self.request_within_last_interval = 0
+        self.request_within_last_interval_per_stage = dict()
 
         # shared flag for signaling child threads
         self.is_running = False
@@ -583,6 +604,7 @@ class Server:
     def run(self, run_time: float):
         self.start()
 
+        assert self.gpu_worker.ident is not None
         logging.info(f"Server {self.server_id} (id: {self.gpu_worker.ident % DIVISOR}) started with location {self.location}.")
 
         if run_time > 0:
