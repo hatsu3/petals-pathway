@@ -81,6 +81,8 @@ class Client:
         self.pending_requests = set()
         self.response_queue = queue.Queue()
 
+        logging.info(f"Client {self.client_id} initialized to {self.location}.")
+
     def get_request_interval(self):
         if self.request_mode == RequestMode.UNIFORM:
             return self.request_avg_interval
@@ -101,7 +103,7 @@ class Client:
                 server_location = self.dht.get_server_location(server_id)
                 comm_latency = self.latency_est.predict(self.location, server_location)
                 logging.debug(f"Predicted communication latency: {comm_latency}.")
-                time.sleep(comm_latency / 1000)
+                # time.sleep(comm_latency / 1000)
 
                 # Get the actual bytes from the request.
                 request_bytes = json.dumps(request.to_json()).encode("utf-8")
@@ -121,6 +123,8 @@ class Client:
                         logging.warning(f"Client {self.client_id} sending to server {server_id} request {request.request_id} timed out.")
                 break
             except ConnectionRefusedError:
+                continue
+            except ConnectionResetError:
                 continue
             except ServerNonExistentException:
                 continue

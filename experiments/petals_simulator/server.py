@@ -418,6 +418,7 @@ class DHTAnnouncer(threading.Thread):
                     self.load_window.pop(0)
                 logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
                 self._announce()
+                self.server.requets_within_last_interval = 0
             except ServerNonExistentException:
                 continue
 
@@ -523,8 +524,6 @@ class Server:
         # e.g. if some servers went offline, the remaining servers may be assigned more stages
         self.stage_rebalancer = StageRebalancer(self)
 
-        logging.debug(f"Server {self.server_id} initiated.")
-
     @property
     def load_level(self):
         return self.task_pool.qsize()
@@ -583,6 +582,8 @@ class Server:
 
     def run(self, run_time: float):
         self.start()
+
+        logging.info(f"Server {self.server_id} (id: {self.gpu_worker.ident % DIVISOR}) started with location {self.location}.")
 
         if run_time > 0:
             time.sleep(run_time)
