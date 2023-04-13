@@ -60,7 +60,7 @@ def run_simulation():
     for i in range(num_servers):
         servers.append(Server(
             ip="127.0.0.1",
-            port=9000 + i,
+            port=random.randint(10000, 20000),
             location=generate_random_location(),
             dht=dht,
             model=model,
@@ -79,7 +79,7 @@ def run_simulation():
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            port=8000 + i,
+            port=random.randint(10000, 20000),
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),

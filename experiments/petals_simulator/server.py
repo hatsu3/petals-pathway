@@ -183,7 +183,7 @@ class ConnectionHandler(threading.Thread):
                     if not request_json:  # Exit signal
                         break
                     request = InferRequest.from_json(json.loads(request_json))
-                    logging.debug(f"Server {self.server.server_id} receives request {request.request_id}.")
+                    logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
                     
                     # Add the task to the task pool
                     stage = self.model.get_stage(request.task_name, request.next_stage_idx)
@@ -301,7 +301,7 @@ class RequestRouter(threading.Thread):
             sock.connect((request.client_ip, request.client_port))
             response = InferResponse(request, result)
             sock.sendall(json.dumps(response.to_json()).encode())
-        logging.debug(f"Server {self.server.server_id} responded to {request.request_id}.")
+        logging.info(f"Server {self.server.server_id} responded to {request.request_id}.")
 
     def run(self):
         while self.server.is_running:
@@ -397,7 +397,7 @@ class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
         req_rate = self.dht.get_normalized_stage_req_rate()
-        serving_servers = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) if req_rate[stage.name] < sys.maxsize else sys.maxsize / req_rate[stage.name] for stage in stages}
+        serving_servers = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) / req_rate[stage.name] if req_rate[stage.name] != 0 else sys.maxsize for stage in stages}
         number_of_servers = self.dht.get_number_of_servers()
         if number_of_servers > 0:
             average_load = sum(req_rate.values()) / self.dht.get_number_of_servers()

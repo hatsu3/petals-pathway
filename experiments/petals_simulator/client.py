@@ -129,7 +129,7 @@ class Client:
             except ServerNonExistentException:
                 continue
 
-        logging.debug(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
+        logging.info(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
 
     def receive_responses(self):
         while self.is_running:
@@ -148,7 +148,7 @@ class Client:
                 response = InferResponse.from_json(json.loads(data.decode("utf-8")))
                 end_to_end_latency = response_timestamp - self.pending_requests[response.request_id]
                 del self.pending_requests[response.request_id]
-                logging.debug(f"Client {self.client_id} received response from server {server_ip}:{server_port} for request {response.request_id}.")
+                logging.info(f"Client {self.client_id} received response from server {server_ip}:{server_port} for request {response.request_id}.")
 
                 # collecting end-to-end latency information for evaluation part
                 with open(f"e2e_latency/{self.client_id}.csv", "a") as f:
