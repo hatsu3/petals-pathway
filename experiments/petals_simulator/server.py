@@ -434,32 +434,81 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
 
 
 class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
+    # this function is only called when a server is online or starting up (current_stages is empty)
+    # which means current_stages are reflected in the DHT
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
-        req_rate = self.dht.get_normalized_stage_req_rate()
-        serving_servers = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) / req_rate[stage.name] if req_rate[stage.name] != 0 else sys.maxsize for stage in stages}
+        req_rate = self.dht.get_normalized_stage_req_rate()  # stage name -> normalized req rate
+
+        # calculate the fulfillment score for each stage as num_replicas / req_rate
+        # the lower the score, the higher priority we should allocate more servers to the stage
+        def calc_fulfillment_score(stage: Stage) -> float:
+            num_replicas = len(self.dht.get_servers_with_stage(stage.name))
+            if req_rate[stage.name] == 0:
+                return sys.maxsize  # handle zero division
+            else:
+                return num_replicas / req_rate[stage.name]
+        
+        fulfillment_scores = {
+            stage.name: calc_fulfillment_score(stage) for stage in stages
+        }
+
         number_of_servers = self.dht.get_number_of_servers()
-        if number_of_servers > 0:
-            average_load = sum(req_rate.values()) / self.dht.get_number_of_servers()
-            current_load = sum([req_rate[stage] for stage in current_stages])
-            if average_load > current_load:
-                while average_load > current_load:
-                    # pick the stage with the least number of servers
-                    candidate = min(serving_servers, key=serving_servers.get) # type: ignore
-                    current_stages.append(candidate)
-                    current_load += req_rate[candidate]
-                    del serving_servers[candidate]
-                return current_stages
-            elif average_load < current_load:
-                while average_load < current_load:
-                    redundant = {stage: serving_servers[stage] for stage in current_stages}
-                    candidate = max(redundant, key=redundant.get)
+        assert number_of_servers > 0, "There should be at least one server in the system"
+        
+        # we calculate the current load assuming that for each stage the load is distributed evenly
+        # across all replicas
+        num_stage_replicas = {
+            stage.name: len(self.dht.get_servers_with_stage(stage.name)) 
+            for stage in stages
+        }
+
+        current_load = sum([
+            req_rate[stage] / num_stage_replicas[stage]
+            for stage in current_stages
+        ])
+
+        # serve all stages that are not currently being served by any server
+        for stage_name, num_replicas in num_stage_replicas.items():
+            if num_replicas == 0:
+                current_stages.append(stage_name)
+                current_load += req_rate[stage_name] / (num_stage_replicas[stage_name] + 1)
+                del fulfillment_scores[stage_name]  # no replacement
+
+        # our goal is to make the load of each server as close to the average load as possible
+        target_load = 1 / number_of_servers
+        
+        # if the current load is lower than the average load, we should add more servers
+        # we pick a few stages with the lowest fulfillment scores
+        if target_load > current_load:
+            while target_load > current_load:
+                candidate = min(fulfillment_scores, key=fulfillment_scores.get) # type: ignore
+                current_stages.append(candidate)
+                current_load += req_rate[candidate] / (num_stage_replicas[candidate] + 1)
+                del fulfillment_scores[candidate]  # no replacement
+        
+        # if the current load is higher than the average load, we should remove some servers
+        # we remove a few stages with the highest fulfillment scores
+        elif target_load < current_load:
+            while target_load < current_load:
+                curr_stg_scores = {
+                    stage: fulfillment_scores[stage] 
+                    for stage in current_stages
+                    if stage in fulfillment_scores
+                }
+
+                # if there are no more stages to remove, break
+                if len(curr_stg_scores) == 0:
+                    break
+                
+                candidate = max(curr_stg_scores, key=curr_stg_scores.get) # type: ignore
+                # only remove the stage if there is at least one replica left
+                if num_stage_replicas[candidate] >= 2:
                     current_stages.remove(candidate)
-                    current_load -= req_rate[candidate]
-                    del serving_servers[candidate]
-                return current_stages
-        else:
-            return []
+                    current_load -= req_rate[candidate] / num_stage_replicas[candidate]
+                del curr_stg_scores[candidate]  # no replacement
+        
+        return current_stages
 
 
 class DHTAnnouncer(threading.Thread):
@@ -527,7 +576,7 @@ class StageRebalancer(threading.Thread):
         self.rebalance_interval = server.rebalance_interval
 
     def run(self):
-        while self.server.is_running:
+        while self.server.is_running and self.dht.get_server_status(self.server.server_id) == ServerStatus.ONLINE:
             stage_ids = self.server.hosted_stages
             new_stages = self.stage_assignment_policy.assign_stages(stage_ids)
             self.hosted_stages = new_stages
@@ -637,8 +686,7 @@ class Server:
         self.dht_announcer.start()
         self.stage_rebalancer.start()
 
-        init_stages = self.stage_assignment_policy.assign_stages(self.hosted_stages)
-        self.hosted_stages = init_stages
+        self.hosted_stages = self.stage_assignment_policy.assign_stages(list())
 
         logging.info(f"Server {self.server_id} started and hosting stages: {self.hosted_stages}.")
 
