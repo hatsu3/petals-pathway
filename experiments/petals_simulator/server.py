@@ -17,7 +17,7 @@ from dht import DistributedHashTable, ServerStatus, ServerNonExistentException
 from messages import InferRequest, InferResponse
 from stage_profiler import ProfilingResults
 
-from trace_visualizer import TraceVisualizer
+from trace_visualizer import TraceVisualizer, DIVISOR
 
 
 def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
@@ -89,7 +89,7 @@ class GPUWorker(threading.Thread):
             if task is None:  # Exit signal
                 break
             thread_id = threading.get_ident()
-            logging.info(f"Worker thread {thread_id} executing task {task.args}")
+            logging.debug(f"Worker thread {thread_id} executing task {task.args}")
             task.execute()
             self.completed_queue.put(task)
 
@@ -180,10 +180,11 @@ class ConnectionHandler(threading.Thread):
                     if not request_json:  # Exit signal
                         break
                     request = InferRequest.from_json(json.loads(request_json))
-                    logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
+                    logging.debug(f"Server {self.server.server_id} receives request {request.request_id}.")
                     stage = self.model.get_stage(request.task_name, request.next_stage_idx)
                     task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
                     self.task_pool.put(task)
+                    self.server.requets_within_last_interval += 1
                     
                     # Send a response to the client or the upstream server
                     # this does not indicate completion of the task but rather that the task has been received
@@ -210,7 +211,10 @@ class RoutingPolicy:
 
         if len(possible_servers) > 0:
             # Return the server with the smallest load
-            possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
+            try:
+                possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
+            except ServerNonExistentException:
+                return -1
             return possible_servers[0]
         else:
             return -1
@@ -282,7 +286,7 @@ class RequestRouter(threading.Thread):
             sock.connect((request.client_ip, request.client_port))
             response = InferResponse(request, result)
             sock.sendall(json.dumps(response.to_json()).encode())
-        logging.info(f"Server {self.server.server_id} responded to {request.request_id}.")
+        logging.debug(f"Server {self.server.server_id} responded to {request.request_id}.")
 
     def run(self):
         while self.server.is_running:
@@ -349,11 +353,16 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
         capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
         number_of_servers = self.dht.get_number_of_servers()
         if number_of_servers > 0:
-            average_load = len(stages) / self.dht.get_number_of_servers()
+            average_load = len(stages) // self.dht.get_number_of_servers()
             while average_load > len(current_stages):
                 # pick the stage with the least number of servers
                 candidate = min(capabilities, key=capabilities.get) # type: ignore
                 current_stages.append(candidate)
+                del capabilities[candidate]
+            while average_load < len(current_stages):
+                redundant = {stage: capabilities[stage] for stage in current_stages}
+                candidate = max(redundant, key=redundant.get)
+                current_stages.remove(candidate)
                 del capabilities[candidate]
             return current_stages
         else:
@@ -366,6 +375,8 @@ class DHTAnnouncer(threading.Thread):
         self.server = server
         self.dht = server.dht
         self.announce_interval = server.announce_interval
+        self.load_window = []
+        self.load_window_size = 3
 
     """
     Let the DHT know of the current status of this server.
@@ -379,12 +390,20 @@ class DHTAnnouncer(threading.Thread):
         self.dht.modify_server_info(server_id, "port", self.server.port)
         self.dht.modify_server_info(server_id, "location", self.server.location)
         self.dht.modify_server_info(server_id, "stages", self.server.hosted_stages)
-        self.dht.modify_server_info(server_id, "load", self.server.load_level)
+        self.dht.modify_server_info(server_id, "load", sum(self.load_window))
         self.dht.modify_server_info(server_id, "status", ServerStatus.ONLINE)
 
     def run(self):
         while self.server.is_running:
-            self._announce()
+            try:
+                self.load_window.append(self.server.requets_within_last_interval)
+                if len(self.load_window) > self.load_window_size:
+                    self.load_window.pop(0)
+                logging.info(f"Thread {threading.get_ident() / DIVISOR} load: {sum(self.load_window)}.")
+                self._announce()
+            except ServerNonExistentException:
+                continue
+
             time.sleep(self.announce_interval)
 
 
@@ -428,7 +447,7 @@ class Server:
                  routing_policy: RoutingPolicy, 
                  stage_assignment_policy: StageAssignmentPolicy):
         
-        logging.info(f"A new Server is being initiated.")
+        logging.debug(f"A new Server is being initiated.")
 
         # server's configurations
         self.ip = ip
@@ -455,6 +474,8 @@ class Server:
         self.task_pool = queue.Queue()
         self.priority_queue = queue.PriorityQueue()
         self.completed_tasks = queue.Queue()
+
+        self.requets_within_last_interval = 0
 
         # shared flag for signaling child threads
         self.is_running = False
@@ -485,14 +506,14 @@ class Server:
         # e.g. if some servers went offline, the remaining servers may be assigned more stages
         self.stage_rebalancer = StageRebalancer(self)
 
-        logging.info(f"Server {self.server_id} initiated.")
+        logging.debug(f"Server {self.server_id} initiated.")
 
     @property
     def load_level(self):
         return self.task_pool.qsize()
 
     def start(self):
-        logging.info(f"Server {self.server_id} is starting.")
+        logging.debug(f"Server {self.server_id} is starting.")
         
         # set the shared flag to start all threads
         self.is_running = True
@@ -509,10 +530,10 @@ class Server:
         init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
         self.hosted_stages = init_stages
 
-        logging.info(f"Server {self.server_id} started.")
+        logging.debug(f"Server {self.server_id} started.")
 
     def stop(self):
-        logging.info(f"Server {self.server_id} is stopping.")
+        logging.debug(f"Server {self.server_id} is stopping.")
 
         self.dht.delete_server(self.server_id)
 
@@ -537,7 +558,7 @@ class Server:
         assert self.server_id is not None
         self.hosted_stages.clear()
 
-        logging.info(f"Server {self.server_id} stopped.")
+        logging.debug(f"Server {self.server_id} stopped.")
 
     def run(self, run_time: float):
         self.start()

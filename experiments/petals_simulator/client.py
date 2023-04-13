@@ -94,7 +94,7 @@ class Client:
         while self.is_running:
             try:
                 server_id = self.server_sel_policy.choose_server(request)
-                logging.info(f"Client {self.client_id} is sending server {server_id} request {request.request_id} .")
+                logging.debug(f"Client {self.client_id} is sending server {server_id} request {request.request_id} .")
 
                 # Simulate communication latency
                 server_ip, server_port = self.dht.get_server_ip_port(server_id)
@@ -115,6 +115,8 @@ class Client:
                         response = sock.recv(1024).decode("utf-8")
                         if response != "OK": 
                             logging.warning(f"Client {self.client_id} received error response from entry server {server_id} for request {request.request_id}.")
+                    except ConnectionResetError:
+                        continue
                     except socket.timeout:
                         logging.warning(f"Client {self.client_id} sending to server {server_id} request {request.request_id} timed out.")
                 break
@@ -123,7 +125,7 @@ class Client:
             except ServerNonExistentException:
                 continue
 
-        logging.info(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
+        logging.debug(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
 
     def receive_responses(self):
         while self.is_running:
@@ -140,7 +142,7 @@ class Client:
                 # Parse the response and notify the client
                 response = InferResponse.from_json(json.loads(data.decode("utf-8")))
                 self.pending_requests.remove(response.request_id)
-                logging.info(f"Client {self.client_id} received response from server {server_ip}:{server_port} for request {response.request_id}.")
+                logging.debug(f"Client {self.client_id} received response from server {server_ip}:{server_port} for request {response.request_id}.")
 
             except queue.Empty:
                 continue

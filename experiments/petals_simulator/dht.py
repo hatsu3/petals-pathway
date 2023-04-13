@@ -42,7 +42,7 @@ class DistributedHashTable:
 
     # modify specific information of a server
     def modify_server_info(self, server_id: int, info_type: str, value):
-        # logging.info(f"DHT updating: Server {server_id} {info_type} = {value}.")
+        # logging.debug(f"DHT updating: Server {server_id} {info_type} = {value}.")
         with self.lock:
             if server_id not in self.server_info:
                 raise ServerNonExistentException

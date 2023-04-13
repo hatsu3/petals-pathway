@@ -3,6 +3,8 @@ import os
 import threading
 import json
 
+DIVISOR = 645713
+
 class TraceVisualizer:
     def __init__(self, log_file_path):
         self.log_file_path = log_file_path
@@ -16,7 +18,7 @@ class TraceVisualizer:
                 'ph': 'B',
                 'ts': ts,
                 'pid': os.getpid(),
-                'tid': threading.get_ident() % 645713,
+                'tid': threading.get_ident() % DIVISOR,
                 'args': {}
             }
             with open(self.log_file_path, 'a') as f:
@@ -31,7 +33,7 @@ class TraceVisualizer:
                 'ph': 'E',
                 'ts': ts,
                 'pid': os.getpid(),
-                'tid': threading.get_ident() % 645713,
+                'tid': threading.get_ident() % DIVISOR,
                 'args': {}
             }
             with open(self.log_file_path, 'a') as f:

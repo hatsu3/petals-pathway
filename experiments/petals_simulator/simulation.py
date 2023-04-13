@@ -18,7 +18,7 @@ class Simulator:
         self.servers = servers
         self.clients = clients
 
-    def run(self, server_run_time: int = 10, client_run_time: int = 10):
+    def run(self, server_run_time: int = 30, client_run_time: int = 30):
         # Start the server thread
         server_threads = [
             threading.Thread(target=server.run, args=(server_run_time,))
@@ -60,7 +60,7 @@ def run_simulation():
     for i in range(num_servers):
         servers.append(Server(
             ip="127.0.0.1",
-            port=16000 + i,
+            port=12000 + i,
             location=generate_random_location(),
             dht=dht,
             model=model,
@@ -79,7 +79,7 @@ def run_simulation():
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            port=26000 + i,
+            port=22000 + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),
@@ -97,7 +97,7 @@ def run_simulation():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
     with open('trace.json', 'a') as f:
         f.write(f"[\n")
     run_simulation()
