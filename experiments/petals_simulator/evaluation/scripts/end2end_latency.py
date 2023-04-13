@@ -33,4 +33,4 @@ for client_id, latencies in client_latency.items():
         stdev_latency = statistics.stdev(latencies)
 
     # Print the results
-    print(f"Client {client_id}: Average latency = {avg_latency:.2f} ms, Standard deviation = {stdev_latency:.2f} ms")
+    print(f"Client {client_id}: Average latency = {avg_latency:.2f} s, Standard deviation = {stdev_latency:.2f} s")

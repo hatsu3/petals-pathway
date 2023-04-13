@@ -18,7 +18,7 @@ class Simulator:
         self.servers = servers
         self.clients = clients
 
-    def run(self, server_run_time: int = 30, client_run_time: int = 30):
+    def run(self, server_run_time: int = 60, client_run_time: int = 60):
         # Start the server thread
         server_threads = [
             threading.Thread(target=server.run, args=(server_run_time,))
@@ -57,8 +57,8 @@ def run_simulation():
     stage_assign_policy = RequestRateStageAssignmentPolicy(model, dht)
 
     # Set low number of servers and clients, for testing
-    num_servers = 2
-    num_clients = 2
+    num_servers = 8
+    num_clients = 50
 
     servers = list()
     for i in range(num_servers):
