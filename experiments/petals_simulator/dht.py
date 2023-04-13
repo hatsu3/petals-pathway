@@ -45,7 +45,7 @@ class DistributedHashTable:
         # logging.info(f"DHT updating: Server {server_id} {info_type} = {value}.")
         with self.lock:
             if server_id not in self.server_info:
-                raise Exception('Server does not exist')
+                raise ServerNonExistentException
         
             if info_type not in self.INFO_TYPES:
                 raise Exception('Invalid info type')

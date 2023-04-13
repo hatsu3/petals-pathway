@@ -315,7 +315,10 @@ class RequestRouter(threading.Thread):
                 sock = self._connect(server_id)
 
                 # Simulate communication latency
-                server_location = self.dht.get_server_location(server_id)
+                try:
+                    server_location = self.dht.get_server_location(server_id)
+                except ServerNonExistentException:
+                    continue
                 self._simulate_comm_latency(server_location)
 
                 # Forward the request to the downstream server
@@ -344,13 +347,17 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
         capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
-        average_load = len(stages) / self.dht.get_number_of_servers()
-        while average_load > len(current_stages):
-            # pick the stage with the least number of servers
-            candidate = min(capabilities, key=capabilities.get) # type: ignore
-            current_stages.append(candidate)
-            del capabilities[candidate]
-        return current_stages
+        number_of_servers = self.dht.get_number_of_servers()
+        if number_of_servers > 0:
+            average_load = len(stages) / self.dht.get_number_of_servers()
+            while average_load > len(current_stages):
+                # pick the stage with the least number of servers
+                candidate = min(capabilities, key=capabilities.get) # type: ignore
+                current_stages.append(candidate)
+                del capabilities[candidate]
+            return current_stages
+        else:
+            return []
 
 
 class DHTAnnouncer(threading.Thread):

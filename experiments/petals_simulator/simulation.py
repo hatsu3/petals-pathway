@@ -73,7 +73,7 @@ def run_simulation():
             routing_policy=routing_policy,
             stage_assignment_policy=stage_assign_policy,
         ))
-        time.sleep(2.0)
+        # time.sleep(2.0)
 
     clients = list()
     for i in range(num_clients):
