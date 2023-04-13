@@ -151,7 +151,7 @@ class Client:
                 logging.debug(f"Client {self.client_id} received response from server {server_ip}:{server_port} for request {response.request_id}.")
 
                 # collecting end-to-end latency information for evaluation part
-                with open("e2e_latency.txt", "a") as f:
+                with open(f"e2e_latency/{self.client_id}.csv", "a") as f:
                     f.write(f"{self.client_id}, {end_to_end_latency}\n")
 
             except queue.Empty:
