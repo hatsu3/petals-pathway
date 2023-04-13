@@ -1,3 +1,4 @@
+from typing import Optional
 import uuid
 import time
 
@@ -7,11 +8,13 @@ from geopy import Point
 # A request to run a task in the multi-task model
 # initialized with the IP address of the client and the task ID
 class InferRequest:
-    def __init__(self, request_id: uuid.UUID, client_ip: str, client_port: int, client_location: Point, task_name: str):
+    def __init__(self, request_id: uuid.UUID, client_ip: str, client_port: int, client_location: Point, 
+                 forwarder_server_id: Optional[int], task_name: str):
         self.request_id = request_id
         self.client_ip = client_ip
         self.client_port = client_port
         self.client_location = client_location
+        self.forwarder_server_id = forwarder_server_id
 
         self.task_name = task_name
         
@@ -35,6 +38,7 @@ class InferRequest:
                 "latitude": self.client_location.latitude,
                 "longitude": self.client_location.longitude
             },
+            "forwarder_server_id": self.forwarder_server_id,
             "task_name": self.task_name,
             "next_stage_idx": self.next_stage_idx
         }
@@ -43,15 +47,16 @@ class InferRequest:
     def from_json(cls, json):
         request_id = uuid.UUID(json["request_id"])
         client_loc = Point(json["client_location"]["latitude"], json["client_location"]["longitude"])
-        request = cls(request_id, json["client_ip"], json["client_port"], client_loc, json["task_name"])
+        request = cls(request_id, json["client_ip"], json["client_port"], client_loc, json["forwarder_server_id"], json["task_name"])
         request.next_stage_idx = json["next_stage_idx"]
         return request
 
 
 class InferResponse:
-    def __init__(self, request: InferRequest, result: float):
+    def __init__(self, request: InferRequest, result: float, responser_server_id: int):
         self.request = request
         self.result = result
+        self.responser_server_id = responser_server_id
 
     @property
     def request_id(self):
@@ -60,10 +65,11 @@ class InferResponse:
     def to_json(self):
         return {
             "request": self.request.to_json(),
-            "result": self.result
+            "result": self.result,
+            "responser_server_id": self.responser_server_id
         }
     
     @classmethod
     def from_json(cls, json):
         request = InferRequest.from_json(json["request"])
-        return cls(request, json["result"])
+        return cls(request, json["result"], json["responser_server_id"])

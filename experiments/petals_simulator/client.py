@@ -94,6 +94,7 @@ class Client:
             raise ValueError(f"Invalid request mode: {self.request_mode}")
     
     def send_request(self, request: InferRequest):
+        server_id = -1
         while self.is_running:
             try:
                 server_id = self.server_sel_policy.choose_server(request)
@@ -141,15 +142,12 @@ class Client:
                 if not data:
                     break
 
-                # Get the server id from the port number of the server
-                server_ip, server_port = addr
-                server_id = self.dht.get_server_id_by_ip_port(server_ip, server_port)
-
                 # Parse the response and notify the client
                 response = InferResponse.from_json(json.loads(data.decode("utf-8")))
+                server_id = response.responser_server_id
                 end_to_end_latency = response_timestamp - self.pending_requests[response.request_id]
                 del self.pending_requests[response.request_id]
-                logging.info(f"Client {self.client_id} received response from server {server_id} {server_ip}:{server_port} for request {response.request_id}.")
+                logging.info(f"Client {self.client_id} received response from server {server_id} for request {response.request_id}.")
 
                 # Create the `e2e_latency` directory if it is not there
                 os.makedirs(f"e2e_latency", exist_ok=True)
@@ -185,7 +183,10 @@ class Client:
             request_id = uuid.uuid4()
 
             # Use the ID to build a `Request` object.
-            request = InferRequest(request_id, self.ip, self.port, self.location, self.task_name)
+            request = InferRequest(
+                request_id, self.ip, self.port, self.location, 
+                forwarder_server_id=None, task_name=self.task_name
+            )
 
             # # Select the server that will receive new request.
             # server_id = self.server_sel_policy.choose_server(request)
