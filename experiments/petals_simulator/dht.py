@@ -10,6 +10,7 @@ from geopy import Point
 class ServerNonExistentException(Exception):
     pass
 
+
 class ServerStatus(Enum):
     OFFLINE = 0
     ONLINE = 1
@@ -99,6 +100,8 @@ class DistributedHashTable:
         output = list()
         with self.lock:
             for server, info in self.server_info.items():
+                if info["status"] != ServerStatus.ONLINE:
+                    continue
                 stages_served = info["stages"]
                 if stages_served != None and stage_name in stages_served:
                     output.append(server)
