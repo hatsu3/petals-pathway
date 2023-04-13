@@ -410,7 +410,7 @@ class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
                     current_load += req_rate[candidate]
                     del serving_servers[candidate]
                 return current_stages
-            else:
+            elif average_load < current_load:
                 while average_load < current_load:
                     redundant = {stage: serving_servers[stage] for stage in current_stages}
                     candidate = max(redundant, key=redundant.get)
@@ -600,7 +600,7 @@ class Server:
         init_stages = self.stage_assignment_policy.assign_stages(self.hosted_stages)
         self.hosted_stages = init_stages
 
-        # logging.debug(f"Server {self.server_id} started.")
+        logging.debug(f"Server {self.server_id} started and hosting stages: {self.hosted_stages}.")
 
     def stop(self):
         # logging.debug(f"Server {self.server_id} is stopping.")
