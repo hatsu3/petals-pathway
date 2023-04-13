@@ -600,7 +600,7 @@ class Server:
         init_stages = self.stage_assignment_policy.assign_stages(self.hosted_stages)
         self.hosted_stages = init_stages
 
-        logging.debug(f"Server {self.server_id} started and hosting stages: {self.hosted_stages}.")
+        logging.info(f"Server {self.server_id} started and hosting stages: {self.hosted_stages}.")
 
     def stop(self):
         # logging.debug(f"Server {self.server_id} is stopping.")
