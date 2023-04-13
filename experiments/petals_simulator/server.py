@@ -382,10 +382,15 @@ class DHTAnnouncer(threading.Thread):
     Let the DHT know of the current status of this server.
     """
     def _announce(self):
-        # List all the information that potentially needs to be sent to DHT
-        # NOTE: For now, we simply refresh all the information every time (at least it does not hurt)
         server_id = self.server.server_id
         assert server_id is not None
+        
+        # If this server is shutting down, don't do anything
+        if self.dht.get_server_status(server_id) == ServerStatus.STOPPING:
+            return
+
+        # List all the information that potentially needs to be sent to DHT
+        # NOTE: For now, we simply refresh all the information every time (at least it does not hurt)
         self.dht.modify_server_info(server_id, "ip", self.server.ip)
         self.dht.modify_server_info(server_id, "port", self.server.port)
         self.dht.modify_server_info(server_id, "location", self.server.location)
@@ -535,8 +540,9 @@ class Server:
     def stop(self):
         logging.debug(f"Server {self.server_id} is stopping.")
 
-        # set the server's status to offline so that other servers and clients will not send requests to it
-        self.dht.modify_server_info(self.server_id, "status", ServerStatus.OFFLINE)
+        # set the server's status to STOPPING so that other servers and clients will not send requests to it
+        # also the announcer will stop announcing the server's information
+        self.dht.modify_server_info(self.server_id, "status", ServerStatus.STOPPING)
 
         # set the shared flag to stop all threads
         self.is_running = False

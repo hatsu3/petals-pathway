@@ -14,6 +14,7 @@ class ServerNonExistentException(Exception):
 class ServerStatus(Enum):
     OFFLINE = 0
     ONLINE = 1
+    STOPPING = 2
 
 
 # NOTE: currently we do not simulate latency in updating and querying the DHT
@@ -126,6 +127,9 @@ class DistributedHashTable:
                 if server_info['ip'] == ip and server_info['port'] == port:
                     return server_id
         return None
+    
+    def get_server_status(self, server_id: int):
+        return self.get_server_info(server_id, 'status')
 
     def to_json(self):
         with self.lock:
