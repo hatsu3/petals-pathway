@@ -535,7 +535,8 @@ class Server:
     def stop(self):
         logging.debug(f"Server {self.server_id} is stopping.")
 
-        self.dht.delete_server(self.server_id)
+        # set the server's status to offline so that other servers and clients will not send requests to it
+        self.dht.modify_server_info(self.server_id, "status", ServerStatus.OFFLINE)
 
         # set the shared flag to stop all threads
         self.is_running = False
@@ -555,7 +556,9 @@ class Server:
         self.stage_rebalancer.join()
         logging.debug(f"Server {self.server_id} stopped the stage rebalancer.")
 
+        # finalize termination and remove the server from the DHT
         assert self.server_id is not None
+        self.dht.delete_server(self.server_id)
         self.hosted_stages.clear()
 
         logging.debug(f"Server {self.server_id} stopped.")
