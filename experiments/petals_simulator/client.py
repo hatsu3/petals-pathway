@@ -78,7 +78,7 @@ class Client:
         self.update_interval = update_interval
         
         self.is_running = True
-        self.pending_requests = set()
+        self.pending_requests = {}
         self.response_queue = queue.Queue()
 
         logging.info(f"Client {self.client_id} initialized to {self.location}.")
@@ -103,7 +103,7 @@ class Client:
                 server_location = self.dht.get_server_location(server_id)
                 comm_latency = self.latency_est.predict(self.location, server_location)
                 logging.debug(f"Predicted communication latency: {comm_latency}.")
-                # time.sleep(comm_latency / 1000)
+                time.sleep(comm_latency / 1000)
 
                 # Get the actual bytes from the request.
                 request_bytes = json.dumps(request.to_json()).encode("utf-8")
@@ -136,6 +136,7 @@ class Client:
             try:
                 conn, addr = self.response_queue.get(timeout=1)
                 data = conn.recv(1024)
+                response_timestamp = time.time()
                 if not data:
                     break
 
@@ -145,8 +146,13 @@ class Client:
 
                 # Parse the response and notify the client
                 response = InferResponse.from_json(json.loads(data.decode("utf-8")))
-                self.pending_requests.remove(response.request_id)
+                end_to_end_latency = response_timestamp - self.pending_requests[response.request_id]
+                del self.pending_requests[response.request_id]
                 logging.debug(f"Client {self.client_id} received response from server {server_ip}:{server_port} for request {response.request_id}.")
+
+                # collecting end-to-end latency information for evaluation part
+                with open("e2e_latency.txt", "a") as f:
+                    f.write(f"{self.client_id}, {end_to_end_latency}\n")
 
             except queue.Empty:
                 continue
@@ -175,9 +181,6 @@ class Client:
             # Create a new request ID and add it to pending requests set.
             request_id = uuid.uuid4()
 
-            # TODO: retry for pending_requests (timeout & server not found)
-            self.pending_requests.add(request_id)
-
             # Use the ID to build a `Request` object.
             request = InferRequest(request_id, self.ip, self.port, self.location, self.task_name)
 
@@ -186,6 +189,9 @@ class Client:
 
             # if server_id >= 0:
             self.send_request(request)
+
+            # TODO: retry for pending_requests (timeout & server not found)
+            self.pending_requests[request_id] = time.time()
 
             time.sleep(self.get_request_interval())
 

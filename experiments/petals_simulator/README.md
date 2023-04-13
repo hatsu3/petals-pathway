@@ -2,7 +2,7 @@
 
 ## TODO
 
-- [ ] Add timestamp field to `InferRequest`
+- [X] Add timestamp field to `InferRequest`
 
 ### Server Selection on Client Side
 
@@ -25,3 +25,15 @@ python3 -m test.test_dht
 
 in order to run the tests for the distributed hash table. Similar files need to
 be written for *all* the components that are part of the simulator.
+
+## Evaluation
+
+### End-to-end Latency
+
+```bash
+cd experiments/petals_simulator
+rm trace.json # in case that stale data exists
+rm e2e_latency.txt # in case that stale data exists
+python3 simulation.py
+python3 evaluation/end2end_latency.py
+```

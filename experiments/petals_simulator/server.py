@@ -129,7 +129,7 @@ class SchedulingEstimationPolicy(SchedulingPolicy):
     def calculate_priority(self, task: GPUTask) -> float:
         # estimated_completion_time = current_time - timestamp + estimate_time_to_completion
         # the lower priority, the earlier to be scheduled, so negate this expression
-        return -(time.time() * 1e3 - task.request.timestamp + self.estimate_time_to_completion(task))
+        return -(time.time() / 1e3 - task.request.timestamp / 1e3 + self.estimate_time_to_completion(task))
 
 
 # A thread that prioritizes tasks based on the scheduling policy
