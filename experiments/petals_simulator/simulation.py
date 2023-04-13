@@ -2,7 +2,7 @@ import random
 import threading
 import time
 
-from server import RoutingPolicy, SchedulingPolicy, SchedulingEstimationPolicy, Server, StageAssignmentPolicy, BaselineStageAssignmentPolicy
+from server import RoutingPolicy, SchedulingPolicy, SchedulingEstimationPolicy, Server, StageAssignmentPolicy, BaselineStageAssignmentPolicy, RequestRateStageAssignmentPolicy
 from client import Client, RequestMode, ServerSelectionPolicy
 from dht import DistributedHashTable
 from stage_profiler import StageProfiler
@@ -51,7 +51,7 @@ def run_simulation():
     server_sel_policy = ServerSelectionPolicy(model, dht)
     sched_policy = SchedulingEstimationPolicy(model, prof_results)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
-    stage_assign_policy = BaselineStageAssignmentPolicy(model, dht)
+    stage_assign_policy = RequestRateStageAssignmentPolicy(model, dht)
 
     num_servers = 8
     num_clients = 50
@@ -60,7 +60,7 @@ def run_simulation():
     for i in range(num_servers):
         servers.append(Server(
             ip="127.0.0.1",
-            port=5000 + i,
+            port=9000 + i,
             location=generate_random_location(),
             dht=dht,
             model=model,
@@ -79,7 +79,7 @@ def run_simulation():
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            port=6000 + i,
+            port=8000 + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),

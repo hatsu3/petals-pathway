@@ -1,3 +1,4 @@
+import sys
 import json
 import queue
 import socket
@@ -370,23 +371,52 @@ class StageAssignmentPolicy:
 class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
-        capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
+        serving_servers = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
         number_of_servers = self.dht.get_number_of_servers()
         if number_of_servers > 0:
             average_load = len(stages) / self.dht.get_number_of_servers()
             if average_load > len(current_stages):
                 while average_load > len(current_stages):
                     # pick the stage with the least number of servers
-                    candidate = min(capabilities, key=capabilities.get) # type: ignore
+                    candidate = min(serving_servers, key=serving_servers.get) # type: ignore
                     current_stages.append(candidate)
-                    del capabilities[candidate]
+                    del serving_servers[candidate]
                 return current_stages
             else:
                 while average_load < len(current_stages):
-                    redundant = {stage: capabilities[stage] for stage in current_stages}
+                    redundant = {stage: serving_servers[stage] for stage in current_stages}
                     candidate = max(redundant, key=redundant.get)
                     current_stages.remove(candidate)
-                    del capabilities[candidate]
+                    del serving_servers[candidate]
+                return current_stages
+        else:
+            return []
+
+
+class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
+    def assign_stages(self, current_stages: list[str]) -> list[str]:
+        stages = self.model.get_stages()
+        req_rate = self.dht.get_normalized_stage_req_rate()
+        serving_servers = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) if req_rate[stage.name] < sys.maxsize else sys.maxsize / req_rate[stage.name] for stage in stages}
+        number_of_servers = self.dht.get_number_of_servers()
+        if number_of_servers > 0:
+            average_load = sum(req_rate.values()) / self.dht.get_number_of_servers()
+            current_load = sum([req_rate[stage] for stage in current_stages])
+            if average_load > current_load:
+                while average_load > current_load:
+                    # pick the stage with the least number of servers
+                    candidate = min(serving_servers, key=serving_servers.get) # type: ignore
+                    current_stages.append(candidate)
+                    current_load += req_rate[candidate]
+                    del serving_servers[candidate]
+                return current_stages
+            else:
+                while average_load < current_load:
+                    redundant = {stage: serving_servers[stage] for stage in current_stages}
+                    candidate = max(redundant, key=redundant.get)
+                    current_stages.remove(candidate)
+                    current_load -= req_rate[candidate]
+                    del serving_servers[candidate]
                 return current_stages
         else:
             return []
