@@ -90,7 +90,7 @@ class GPUWorker(threading.Thread):
             if task is None:  # Exit signal
                 break
             thread_id = threading.get_ident()
-            logging.debug(f"Worker thread {thread_id} executing task {task.args}")
+            # logging.debug(f"Worker thread {thread_id} executing task {task.args}")
             task.execute()
             self.completed_queue.put(task)
 
@@ -179,11 +179,11 @@ class ConnectionHandler(threading.Thread):
                 try:
                     conn, addr = sock.accept()
                     request_json = conn.recv(1024).decode().strip()
-                    logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
+                    # logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
                     if not request_json:  # Exit signal
                         break
                     request = InferRequest.from_json(json.loads(request_json))
-                    logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
+                    # logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
                     
                     # Add the task to the task pool
                     stage = self.model.get_stage(request.task_name, request.next_stage_idx)
@@ -301,7 +301,7 @@ class RequestRouter(threading.Thread):
             sock.connect((request.client_ip, request.client_port))
             response = InferResponse(request, result)
             sock.sendall(json.dumps(response.to_json()).encode())
-        logging.info(f"Server {self.server.server_id} responded to {request.request_id}.")
+        # logging.info(f"Server {self.server.server_id} responded to {request.request_id}.")
 
     def run(self):
         while self.server.is_running:
@@ -435,8 +435,11 @@ class DHTAnnouncer(threading.Thread):
     Let the DHT know of the current status of this server.
     """
     def _announce(self):
+
+        # Get the ID of the server. Make sure the number makes sense
         server_id = self.server.server_id
         assert server_id is not None
+        assert server_id >= 0
         
         # If this server is shutting down, don't do anything
         if self.dht.get_server_status(server_id) == ServerStatus.STOPPING:
@@ -462,7 +465,7 @@ class DHTAnnouncer(threading.Thread):
                 
                 # Announce the current status
                 assert self.server.gpu_worker.ident is not None
-                logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
+                # logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
                 self._announce()
                 # logging.info(f"Normalized stage request rate: {self.server.dht.get_normalized_stage_req_rate()}")
 
@@ -515,7 +518,7 @@ class Server:
                  routing_policy: RoutingPolicy, 
                  stage_assignment_policy: StageAssignmentPolicy):
         
-        logging.debug(f"A new Server is being initiated.")
+        # logging.debug(f"A new Server is being initiated.")
 
         # server's configurations
         self.ip = ip
@@ -580,7 +583,7 @@ class Server:
         return self.task_pool.qsize()
 
     def start(self):
-        logging.debug(f"Server {self.server_id} is starting.")
+        # logging.debug(f"Server {self.server_id} is starting.")
         
         # set the shared flag to start all threads
         self.is_running = True
@@ -597,10 +600,10 @@ class Server:
         init_stages = self.stage_assignment_policy.assign_stages(self.hosted_stages)
         self.hosted_stages = init_stages
 
-        logging.debug(f"Server {self.server_id} started.")
+        # logging.debug(f"Server {self.server_id} started.")
 
     def stop(self):
-        logging.debug(f"Server {self.server_id} is stopping.")
+        # logging.debug(f"Server {self.server_id} is stopping.")
 
         # set the server's status to STOPPING so that other servers and clients will not send requests to it
         # also the announcer will stop announcing the server's information
@@ -611,31 +614,31 @@ class Server:
 
         # wait for all threads to finish
         self.connection_handler.join()
-        logging.debug(f"Server {self.server_id} stopped the connection handler.")
+        # logging.debug(f"Server {self.server_id} stopped the connection handler.")
         self.request_priortizer.join()
-        logging.debug(f"Server {self.server_id} stopped the request prioritizer.")
+        # logging.debug(f"Server {self.server_id} stopped the request prioritizer.")
         self.gpu_worker.join()
-        logging.debug(f"Server {self.server_id} stopped the gpu worker.")
+        # logging.debug(f"Server {self.server_id} stopped the gpu worker.")
         for router in self.request_routers:
             router.join()
-        logging.debug(f"Server {self.server_id} stopped the requster routers.")
+        # logging.debug(f"Server {self.server_id} stopped the requster routers.")
         self.dht_announcer.join()
-        logging.debug(f"Server {self.server_id} stopped the dht announcer.")
+        # logging.debug(f"Server {self.server_id} stopped the dht announcer.")
         self.stage_rebalancer.join()
-        logging.debug(f"Server {self.server_id} stopped the stage rebalancer.")
+        # logging.debug(f"Server {self.server_id} stopped the stage rebalancer.")
 
         # finalize termination and remove the server from the DHT
         assert self.server_id is not None
         self.dht.delete_server(self.server_id)
         self.hosted_stages.clear()
 
-        logging.debug(f"Server {self.server_id} stopped.")
+        # logging.debug(f"Server {self.server_id} stopped.")
 
     def run(self, run_time: float):
         self.start()
 
         assert self.gpu_worker.ident is not None
-        logging.info(f"Server {self.server_id} (id: {self.gpu_worker.ident % DIVISOR}) started with location {self.location}.")
+        # logging.info(f"Server {self.server_id} (id: {self.gpu_worker.ident % DIVISOR}) started with location {self.location}.")
 
         if run_time > 0:
             time.sleep(run_time)

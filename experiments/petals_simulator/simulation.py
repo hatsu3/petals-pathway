@@ -44,17 +44,21 @@ class Simulator:
 
 
 def run_simulation():
+
+    # Construct dummy model, initialize DHT and get latency estimates
     model, prof_results = get_dummy_model_and_prof_results()
     dht = DistributedHashTable(model)
     latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
 
+    # Set the policies
     server_sel_policy = ServerSelectionPolicy(model, dht)
     sched_policy = SchedulingEstimationPolicy(model, prof_results)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
     stage_assign_policy = RequestRateStageAssignmentPolicy(model, dht)
 
-    num_servers = 8
-    num_clients = 50
+    # Set low number of servers and clients, for testing
+    num_servers = 2
+    num_clients = 2
 
     servers = list()
     for i in range(num_servers):
@@ -73,7 +77,6 @@ def run_simulation():
             routing_policy=routing_policy,
             stage_assignment_policy=stage_assign_policy,
         ))
-        # time.sleep(2.0)
 
     clients = list()
     for i in range(num_clients):
