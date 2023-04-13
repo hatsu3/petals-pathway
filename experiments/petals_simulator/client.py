@@ -6,6 +6,7 @@ import random
 from enum import Enum
 import threading
 import time
+import os
 
 from geopy import Point
 
@@ -150,6 +151,8 @@ class Client:
                 del self.pending_requests[response.request_id]
                 logging.info(f"Client {self.client_id} received response from server {server_id} {server_ip}:{server_port} for request {response.request_id}.")
 
+                # Create the `e2e_latency` directory if it is not there
+                os.makedirs(f"e2e_latency", exist_ok=True)
                 # collecting end-to-end latency information for evaluation part
                 with open(f"e2e_latency/{self.client_id}.csv", "a") as f:
                     f.write(f"{self.client_id}, {end_to_end_latency}\n")
