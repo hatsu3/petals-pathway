@@ -268,7 +268,10 @@ class RequestRouter(threading.Thread):
         self.model = server.model
 
     def _connect(self, server_id: int):
-        server_ip, server_port = self.dht.get_server_ip_port(server_id)
+        try:
+            server_ip, server_port = self.dht.get_server_ip_port(server_id)
+        except ServerNonExistentException:
+            raise ServerNonExistentException
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect((server_ip, server_port))
         return sock
@@ -309,14 +312,20 @@ class RequestRouter(threading.Thread):
                 continue
 
             # Determine the downstream server and send the request
-            server_id = self.routing_policy.route(task.request)
+            try:
+                server_id = self.routing_policy.route(task.request)
+            except ServerNonExistentException:
+                continue
             
             if server_id < 0:
                 time.sleep(1)
                 continue
 
             if server_id != self.server.server_id:
-                sock = self._connect(server_id)
+                try:
+                    sock = self._connect(server_id)
+                except ServerNonExistentException:
+                    continue
 
                 # Simulate communication latency
                 try:
@@ -404,7 +413,7 @@ class DHTAnnouncer(threading.Thread):
                 self.load_window.append(self.server.requets_within_last_interval)
                 if len(self.load_window) > self.load_window_size:
                     self.load_window.pop(0)
-                logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)}.")
+                logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
                 self._announce()
             except ServerNonExistentException:
                 continue

@@ -119,7 +119,10 @@ class DistributedHashTable:
         return self.get_server_info(server_id, 'load')
 
     def get_server_ip_port(self, server_id: int):
-        return self.get_server_info(server_id, 'ip'), self.get_server_info(server_id, 'port')
+        with self.lock:
+            if server_id not in self.server_info:
+                raise ServerNonExistentException
+            return self.server_info[server_id]['ip'], self.server_info[server_id]['port']
     
     def get_server_id_by_ip_port(self, ip, port):
         with self.lock:
