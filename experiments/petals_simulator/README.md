@@ -3,6 +3,10 @@
 ## TODO
 
 - [X] Add timestamp field to `InferRequest`
+- [ ] Figure out why the DHT is not storing server IDs anymore.
+   * This is needed because the client will call `choose_server()`. This method
+     is supposed to return a server ID, based on which the client will again
+     query the DHT to get the IP and the port of the server.
 
 ### Server Selection on Client Side
 
