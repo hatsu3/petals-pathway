@@ -399,7 +399,7 @@ class DHTAnnouncer(threading.Thread):
                 self.load_window.append(self.server.requets_within_last_interval)
                 if len(self.load_window) > self.load_window_size:
                     self.load_window.pop(0)
-                logging.info(f"Thread {threading.get_ident() % DIVISOR} load: {sum(self.load_window)}.")
+                logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)}.")
                 self._announce()
             except ServerNonExistentException:
                 continue
