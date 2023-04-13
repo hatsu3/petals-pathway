@@ -72,9 +72,8 @@ class DistributedHashTable:
                 'ip': None,
                 'port': None,
                 'location': None,
-                'status': None,
-                'stages': None,
-                'load': None,
+                'stages': [],
+                'load': 0,
                 'status': ServerStatus.OFFLINE
             }
 

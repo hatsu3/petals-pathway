@@ -362,18 +362,21 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
         capabilities = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
         number_of_servers = self.dht.get_number_of_servers()
         if number_of_servers > 0:
-            average_load = len(stages) // self.dht.get_number_of_servers()
-            while average_load > len(current_stages):
-                # pick the stage with the least number of servers
-                candidate = min(capabilities, key=capabilities.get) # type: ignore
-                current_stages.append(candidate)
-                del capabilities[candidate]
-            while average_load < len(current_stages):
-                redundant = {stage: capabilities[stage] for stage in current_stages}
-                candidate = max(redundant, key=redundant.get)
-                current_stages.remove(candidate)
-                del capabilities[candidate]
-            return current_stages
+            average_load = len(stages) / self.dht.get_number_of_servers()
+            if average_load > len(current_stages):
+                while average_load > len(current_stages):
+                    # pick the stage with the least number of servers
+                    candidate = min(capabilities, key=capabilities.get) # type: ignore
+                    current_stages.append(candidate)
+                    del capabilities[candidate]
+                return current_stages
+            else:
+                while average_load < len(current_stages):
+                    redundant = {stage: capabilities[stage] for stage in current_stages}
+                    candidate = max(redundant, key=redundant.get)
+                    current_stages.remove(candidate)
+                    del capabilities[candidate]
+                return current_stages
         else:
             return []
 
@@ -431,7 +434,7 @@ class StageRebalancer(threading.Thread):
 
     def run(self):
         while self.server.is_running:
-            stage_ids = []
+            stage_ids = self.server.hosted_stages
             new_stages = self.stage_assignment_policy.assign_stages(stage_ids)
             self.hosted_stages = new_stages
             assert self.server.server_id is not None
@@ -482,7 +485,7 @@ class Server:
 
         # the server's id and the stages it hosts
         self.server_id = self.dht.register_server()
-        self.hosted_stages: list[str] = list()
+        self.hosted_stages: list[str] = []
         
         # queues for communication between threads
         self.task_pool = queue.Queue()
@@ -541,7 +544,7 @@ class Server:
         self.dht_announcer.start()
         self.stage_rebalancer.start()
 
-        init_stages = self.stage_assignment_policy.assign_stages(current_stages=[])
+        init_stages = self.stage_assignment_policy.assign_stages(self.hosted_stages)
         self.hosted_stages = init_stages
 
         logging.debug(f"Server {self.server_id} started.")
