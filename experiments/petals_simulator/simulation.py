@@ -58,7 +58,7 @@ def run_simulation():
 
     # Set low number of servers and clients, for testing
     num_servers = 8
-    num_clients = 10
+    num_clients = 50
 
     servers = list()
     for i in range(num_servers):

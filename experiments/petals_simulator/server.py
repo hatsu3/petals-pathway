@@ -270,6 +270,8 @@ class RandomRoutingPolicy:
         if len(possible_servers) > 0:
             # Return random server in the list
             return random.choice(possible_servers)
+        else:
+            return -1
 
     def _update(self):
         pass
@@ -393,7 +395,7 @@ class RequestRouter(threading.Thread):
                 # Determine the downstream server and send the request
                 server_id = self.routing_policy.route(task.request)
                 if server_id < 0:
-                    logging.warning(
+                    logging.info(
                         f"Server {self.server.server_id} failed to find a downstream server in routing"
                     )
                     time.sleep(1)
