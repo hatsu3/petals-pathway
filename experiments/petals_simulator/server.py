@@ -235,7 +235,7 @@ class RoutingPolicy:
         if len(possible_servers) > 0:
             # Return the server with the smallest load
             try:
-                possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
+                possible_servers.sort(key = lambda x: self.dht.get_server_instant_load(x))
             except ServerNonExistentException:
                 return -1
             return possible_servers[0]
@@ -417,6 +417,11 @@ class StageAssignmentPolicy:
         pass
 
 
+class DummyStageAssignmentPolicy(StageAssignmentPolicy):
+    def assign_stages(self, current_stages: list[str]) -> list[str]:
+        return [stage.name for stage in self.model.get_stages()]
+ 
+
 class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         stages = self.model.get_stages()
@@ -546,6 +551,7 @@ class DHTAnnouncer(threading.Thread):
         self.dht.modify_server_info(server_id, "port", self.server.port)
         self.dht.modify_server_info(server_id, "location", self.server.location)
         self.dht.modify_server_info(server_id, "stages", self.server.hosted_stages)
+        self.dht.modify_server_info(server_id, "instant_load", self.server.task_pool.qsize() + self.server.priority_queue.qsize())
         self.dht.modify_server_info(server_id, "load", sum(self.load_window))
         self.dht.modify_server_info(server_id, "status", ServerStatus.ONLINE)
         self.dht.update_stage_req_rate(self.server.request_within_last_interval_per_stage)

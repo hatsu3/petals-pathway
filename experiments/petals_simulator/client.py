@@ -125,6 +125,7 @@ class Client:
                     except socket.timeout:
                         logging.warning(f"Client {self.client_id} sending to server {server_id} request {request.request_id} timed out.")
                         continue
+                logging.info(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
                 break
             except ConnectionRefusedError:
                 continue
@@ -132,8 +133,6 @@ class Client:
                 continue
             except ServerNonExistentException:
                 continue
-
-        logging.info(f"Client {self.client_id} sent server {server_id} request {request.request_id}.")
 
     def receive_responses(self):
         while self.is_running:
