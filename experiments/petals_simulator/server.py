@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import sys
 import json
 import queue
@@ -162,53 +163,58 @@ class RequestPriortizer(threading.Thread):
 # A thread that handles incoming connections from clients
 # deserialized tasks and adds them to the task queue
 class ConnectionHandler(threading.Thread):
-    def __init__(self, server: "Server"):
+    def __init__(self, server: "Server", num_workers: int = 20):
         super().__init__()
         self.server = server
         self.task_pool = server.task_pool
         self.port = server.port
         self.model = server.model
         self.prof_results = server.prof_results
+        self.num_workers = num_workers
+
+    def _handle_connection(self, conn: socket.socket, addr: str):
+        request_json = conn.recv(1024).decode().strip()
+        # logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
+
+        request = InferRequest.from_json(json.loads(request_json))
+        # logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
+        
+        # determine if the request is from a client or from an upstream server
+        sender_server_id = request.forwarder_server_id
+        if sender_server_id is None:  # from a client
+            logging.info(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from a client.")
+        else:  # from an upstream server
+            logging.info(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from server {sender_server_id}.")
+        
+        # Add the task to the task pool
+        stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+        task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
+        self.task_pool.put(task)
+        
+        # Update the request count
+        self.server.request_within_last_interval += 1
+        if stage.name not in self.server.request_within_last_interval_per_stage:
+            self.server.request_within_last_interval_per_stage[stage.name] = 0
+        self.server.request_within_last_interval_per_stage[stage.name] += 1
+        
+        # Send a response to the client or the upstream server
+        # this does not indicate completion of the task but rather that the task has been received
+        conn.sendall(b"OK")
+        conn.close()
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(('localhost', self.port))
             sock.listen()
             sock.settimeout(5.0)
-            while self.server.is_running:
-                try:
-                    conn, addr = sock.accept()
-                    request_json = conn.recv(1024).decode().strip()
-                    # logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
-                    if not request_json:  # Exit signal
-                        break
-                    request = InferRequest.from_json(json.loads(request_json))
-                    # logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
-                    
-                    # determine if the request is from a client or from an upstream server
-                    sender_server_id = request.forwarder_server_id
-                    if sender_server_id is None:  # from a client
-                        logging.info(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from a client.")
-                    else:  # from an upstream server
-                        logging.info(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from server {sender_server_id}.")
-                    
-                    # Add the task to the task pool
-                    stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-                    task = GPUTask(request, "simulated_execution", args=(stage, 1, self.prof_results))
-                    self.task_pool.put(task)
-                    
-                    # Update the request count
-                    self.server.request_within_last_interval += 1
-                    if stage.name not in self.server.request_within_last_interval_per_stage:
-                        self.server.request_within_last_interval_per_stage[stage.name] = 0
-                    self.server.request_within_last_interval_per_stage[stage.name] += 1
-                    
-                    # Send a response to the client or the upstream server
-                    # this does not indicate completion of the task but rather that the task has been received
-                    conn.sendall(b"OK")
-                    conn.close()
-                except socket.timeout:
-                    continue
+
+            with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
+                while self.server.is_running:
+                    try:
+                        conn, addr = sock.accept()
+                        executor.submit(self._handle_connection, conn, addr)
+                    except socket.timeout:
+                        continue
 
 
 # A routing policy that determines which downstream server to send a request to
