@@ -165,7 +165,7 @@ class Client:
     def connection_handler(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind(('0.0.0.0', self.port))
-        server_socket.listen(1)
+        server_socket.listen()
         server_socket.settimeout(5.0)
 
         while self.is_running:
