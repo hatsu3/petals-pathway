@@ -428,6 +428,9 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
         serving_servers = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
         number_of_servers = self.dht.get_number_of_servers()
         if number_of_servers > 0:
+            for stage_name, number_of_server in serving_servers.items():
+                if number_of_server < 1:
+                    current_stages.append(stage_name)
             average_load = len(stages) / self.dht.get_number_of_servers()
             if average_load > len(current_stages):
                 while average_load > len(current_stages):
@@ -437,11 +440,17 @@ class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
                     del serving_servers[candidate]
                 return current_stages
             else:
-                while average_load < len(current_stages):
-                    redundant = {stage: serving_servers[stage] for stage in current_stages}
+                to_restore = []
+                redundant = {stage: serving_servers[stage] for stage in current_stages}
+                while average_load < len(current_stages) and len(redundant) != 0:
                     candidate = max(redundant, key=redundant.get)
                     current_stages.remove(candidate)
-                    del serving_servers[candidate]
+                    del redundant[candidate]
+                    # flip a coin to reduce the possibility
+                    # that all servers drop this stage
+                    if random.randint(0, 99) % 5:
+                        to_restore.append(candidate)
+                current_stages.extend(to_restore)
                 return current_stages
         else:
             return []

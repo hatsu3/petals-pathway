@@ -54,7 +54,7 @@ def run_simulation():
     server_sel_policy = ServerSelectionPolicy(model, dht)
     sched_policy = SchedulingEstimationPolicy(model, prof_results)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
-    stage_assign_policy = DummyStageAssignmentPolicy(model, dht)
+    stage_assign_policy = RequestRateStageAssignmentPolicy(model, dht)
 
     # Set low number of servers and clients, for testing
     num_servers = 8
