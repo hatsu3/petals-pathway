@@ -316,92 +316,96 @@ class RequestRouter(threading.Thread):
             sock.sendall(json.dumps(response.to_json()).encode())
         # logging.info(f"Server {self.server.server_id} responded to {request.request_id}.")
 
+    def _forward_request(self, request: InferRequest, server_id: int):
+        logging.info(
+            f"Server {self.server.server_id} is forwarding request (task={request.task_name}, "
+            f"stage={request.next_stage_idx}) to a downsteam server {server_id}"
+        )
+        try:
+            sock = self._connect(server_id)
+        except ServerNonExistentException:
+            logging.warning(
+                f"Server {self.server.server_id} failed to get the IP and port of server {server_id}"
+                f"because the downstream server does not exist."
+            )
+            return
+
+        # Simulate communication latency
+        try:
+            server_location = self.dht.get_server_location(server_id)
+        except ServerNonExistentException:
+            logging.warning(
+                f"Server {self.server.server_id} failed to get the location of server {server_id}"
+                f"because the downstream server does not exist."
+            )
+            return
+
+        self._simulate_comm_latency(server_location)
+
+        # Forward the request to the downstream server
+        try:
+            sock.sendall(json.dumps(request.to_json()).encode())
+            logging.info(
+                f"Server {self.server.server_id} forwarded request (task={request.task_name}, "
+                f"stage={request.next_stage_idx}) to a downsteam server {server_id}"
+            )
+        except ConnectionResetError:
+            logging.warning(
+                f"Server {self.server.server_id} failed to forward request to server {server_id}"
+                f"because the connection was reset by the downstream server."
+            )
+            # TODO: fault tolerance
+            return
+
     def run(self):
-        while self.server.is_running:
-            # Periodically update the routing policy
-            self.routing_policy.update_if_needed()
-            
-            # Check if there are any completed tasks
-            # We avoid blocking the thread because we want to periodically update the routing policy
-            try:
-                task: GPUTask = self.completed_queue.get(timeout=1)
-            except queue.Empty:
-                continue
-
-            # Update the request
-            request = task.request.update()  # that we have executed the current stage
-
-            # If the task is the last stage, send the response to the client
-            if task.request.next_stage_idx >= self.model.get_task_num_stages(task.request.task_name):
-                logging.info(
-                    f"Server {self.server.server_id} completed request (task={request.task_name}. "
-                    f"Responding to client {request.client_ip}:{request.client_port}."
-                )
-                self._respond_to_client(task.request, task.result)
-                continue
-            
-            # If the task is not the last stage, forward the request to a downstream server or itself
-            # We specify the server id of the forwarder in the request because it's awkward to determine
-            # the server id of the forwarder from ip and port
-            request.forwarder_server_id = self.server.server_id
-
-            # Determine the downstream server and send the request
-            server_id = self.routing_policy.route(task.request)
-            if server_id < 0:
-                logging.warning(
-                    f"Server {self.server.server_id} failed to find a downstream server in routing"
-                )
-                time.sleep(1)
-                continue
-
-            if server_id != self.server.server_id:
-                logging.info(
-                    f"Server {self.server.server_id} is forwarding request (task={request.task_name}, "
-                    f"stage={request.next_stage_idx}) to a downsteam server {server_id}"
-                )
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            while self.server.is_running:
+                # Periodically update the routing policy
+                self.routing_policy.update_if_needed()
+                
+                # Check if there are any completed tasks
+                # We avoid blocking the thread because we want to periodically update the routing policy
                 try:
-                    sock = self._connect(server_id)
-                except ServerNonExistentException:
-                    logging.warning(
-                        f"Server {self.server.server_id} failed to get the IP and port of server {server_id}"
-                        f"because the downstream server does not exist."
-                    )
+                    task: GPUTask = self.completed_queue.get(timeout=1)
+                except queue.Empty:
                     continue
 
-                # Simulate communication latency
-                try:
-                    server_location = self.dht.get_server_location(server_id)
-                except ServerNonExistentException:
-                    logging.warning(
-                        f"Server {self.server.server_id} failed to get the location of server {server_id}"
-                        f"because the downstream server does not exist."
-                    )
-                    continue
+                # Update the request
+                request = task.request.update()  # that we have executed the current stage
 
-                self._simulate_comm_latency(server_location)
-
-                # Forward the request to the downstream server
-                try:
-                    sock.sendall(json.dumps(request.to_json()).encode())
+                # If the task is the last stage, send the response to the client
+                if task.request.next_stage_idx >= self.model.get_task_num_stages(task.request.task_name):
                     logging.info(
-                        f"Server {self.server.server_id} forwarded request (task={request.task_name}, "
-                        f"stage={request.next_stage_idx}) to a downsteam server {server_id}"
+                        f"Server {self.server.server_id} completed request (task={request.task_name}. "
+                        f"Responding to client {request.client_ip}:{request.client_port}."
                     )
-                except ConnectionResetError:
-                    logging.warning(
-                        f"Server {self.server.server_id} failed to forward request to server {server_id}"
-                        f"because the connection was reset by the downstream server."
-                    )
-                    # TODO: fault tolerance
+                    executor.submit(self._respond_to_client, task.request, task.result)
                     continue
-            else:
-                logging.info(
-                    f"Server {self.server.server_id} does not forward request (task={request.task_name}, "
-                    f"stage={request.next_stage_idx}) because it hosts the next stage."
-                )
-                stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-                task = GPUTask(request, "simulated_execution", args=(stage, 1, self.server.prof_results))
-                self.server.task_pool.put(task)
+                
+                # If the task is not the last stage, forward the request to a downstream server or itself
+                # We specify the server id of the forwarder in the request because it's awkward to determine
+                # the server id of the forwarder from ip and port
+                request.forwarder_server_id = self.server.server_id
+
+                # Determine the downstream server and send the request
+                server_id = self.routing_policy.route(task.request)
+                if server_id < 0:
+                    logging.warning(
+                        f"Server {self.server.server_id} failed to find a downstream server in routing"
+                    )
+                    time.sleep(1)
+                    continue
+
+                if server_id != self.server.server_id:
+                    executor.submit(self._forward_request, request, server_id)
+                else:
+                    logging.info(
+                        f"Server {self.server.server_id} does not forward request (task={request.task_name}, "
+                        f"stage={request.next_stage_idx}) because it hosts the next stage."
+                    )
+                    stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+                    task = GPUTask(request, "simulated_execution", args=(stage, 1, self.server.prof_results))
+                    self.server.task_pool.put(task)
 
 
 class StageAssignmentPolicy:
