@@ -18,7 +18,7 @@ class Simulator:
         self.servers = servers
         self.clients = clients
 
-    def run(self, server_run_time: int = 20, client_run_time: int = 20):
+    def run(self, server_run_time: int = 22, client_run_time: int = 20):
         # Start the server thread
         server_threads = [
             threading.Thread(target=server.run, args=(server_run_time,))

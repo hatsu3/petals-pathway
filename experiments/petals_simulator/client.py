@@ -221,13 +221,15 @@ class Client:
             self.stop()
 
         request_thread.join()
-        # logging.debug(f"Client {self.client_id} stopped the request thread.")
+        logging.debug(f"Client {self.client_id} stopped the request thread.")
         listener_thread.join()
-        # logging.debug(f"Client {self.client_id} stopped the listener thread.")
+        logging.debug(f"Client {self.client_id} stopped the listener thread.")
         response_thread.join()
-        # logging.debug(f"Client {self.client_id} stopped the response thread.")
+        logging.debug(f"Client {self.client_id} stopped the response thread.")
         update_policy_thread.join()
-        # logging.debug(f"Client {self.client_id} stopped the updating-policy thread.")
+        logging.debug(f"Client {self.client_id} stopped the updating-policy thread.")
+
+        logging.debug(f"Client {self.client_id} stopped.")
 
     def stop(self):
         self.is_running = False

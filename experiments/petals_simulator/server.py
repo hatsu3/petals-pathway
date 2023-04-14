@@ -493,7 +493,7 @@ class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
         }
 
         current_load = sum([
-            req_rate[stage] / num_stage_replicas[stage]
+            req_rate[stage] / (num_stage_replicas[stage] + 1)
             for stage in current_stages
         ])
 
@@ -748,7 +748,7 @@ class Server:
         logging.debug(f"Server {self.server_id} deleted its info from dht.")
         self.hosted_stages.clear()
 
-        logging.debug(f"Server {self.server_id} stopped.")
+        logging.info(f"Server {self.server_id} stopped.")
 
     def run(self, run_time: float):
         self.start()
