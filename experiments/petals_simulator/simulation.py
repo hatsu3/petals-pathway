@@ -2,7 +2,7 @@ import random
 import threading
 import time
 
-from server import RoutingPolicy, SchedulingPolicy, SchedulingEstimationPolicy, Server, StageAssignmentPolicy, BaselineStageAssignmentPolicy, RequestRateStageAssignmentPolicy
+from server import RoutingPolicy, RandomRoutingPolicy, SchedulingPolicy, SchedulingEstimationPolicy, Server, StageAssignmentPolicy, DummyStageAssignmentPolicy, BaselineStageAssignmentPolicy, RequestRateStageAssignmentPolicy
 from client import Client, RequestMode, ServerSelectionPolicy
 from dht import DistributedHashTable
 from stage_profiler import StageProfiler
@@ -54,11 +54,11 @@ def run_simulation():
     server_sel_policy = ServerSelectionPolicy(model, dht)
     sched_policy = SchedulingEstimationPolicy(model, prof_results)
     routing_policy = RoutingPolicy(model, dht, update_interval=3)
-    stage_assign_policy = RequestRateStageAssignmentPolicy(model, dht)
+    stage_assign_policy = DummyStageAssignmentPolicy(model, dht)
 
     # Set low number of servers and clients, for testing
     num_servers = 8
-    num_clients = 50
+    num_clients = 10
 
     servers = list()
     for i in range(num_servers):
@@ -100,7 +100,7 @@ def run_simulation():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.WARNING)
     with open('trace.json', 'a') as f:
         f.write(f"[\n")
     run_simulation()
