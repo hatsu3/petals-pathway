@@ -198,7 +198,7 @@ plt.bar(policies, latencies, color=colors)
 # Add labels and a title. Note the use of `labelpad` and `pad` to add some
 # extra space between the text and the tick labels.
 plt.xlabel('Policy')
-plt.ylabel('Average Latency (ms)')
+plt.ylabel('Average Latency (sec)')
 plt.title('Policy Effects on Latency')
 
 plt.savefig('./policy-vs-latency.png')
