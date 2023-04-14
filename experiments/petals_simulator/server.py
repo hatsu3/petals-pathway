@@ -174,17 +174,17 @@ class ConnectionHandler(threading.Thread):
 
     def _handle_connection(self, conn: socket.socket, addr: str):
         request_json = conn.recv(1024).decode().strip()
-        # logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
+        logging.debug(f"Server {self.server.server_id} receiving request {request_json}.")
 
         request = InferRequest.from_json(json.loads(request_json))
-        # logging.info(f"Server {self.server.server_id} receives request {request.request_id}.")
+        logging.debug(f"Server {self.server.server_id} receives request {request.request_id}.")
         
         # determine if the request is from a client or from an upstream server
         sender_server_id = request.forwarder_server_id
         if sender_server_id is None:  # from a client
-            logging.info(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from a client.")
+            logging.debug(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from a client.")
         else:  # from an upstream server
-            logging.info(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from server {sender_server_id}.")
+            logging.debug(f"Server {self.server.server_id} receives request (task={request.task_name}, stage={request.next_stage_idx}) from server {sender_server_id}.")
         
         # Add the task to the task pool
         stage = self.model.get_stage(request.task_name, request.next_stage_idx)
@@ -322,7 +322,7 @@ class RequestRouter(threading.Thread):
                 pass
 
     def _forward_request(self, request: InferRequest, server_id: int):
-        logging.info(
+        logging.debug(
             f"Server {self.server.server_id} is forwarding request (task={request.task_name}, "
             f"stage={request.next_stage_idx}) to a downsteam server {server_id}"
         )
@@ -395,7 +395,7 @@ class RequestRouter(threading.Thread):
                 # Determine the downstream server and send the request
                 server_id = self.routing_policy.route(task.request)
                 if server_id < 0:
-                    logging.info(
+                    logging.debug(
                         f"Server {self.server.server_id} failed to find a downstream server in routing"
                     )
                     time.sleep(1)
@@ -581,9 +581,9 @@ class DHTAnnouncer(threading.Thread):
                 
                 # Announce the current status
                 assert self.server.gpu_worker.ident is not None
-                # logging.info(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
+                logging.debug(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
                 self._announce()
-                # logging.info(f"Normalized stage request rate: {self.server.dht.get_normalized_stage_req_rate()}")
+                logging.debug(f"Normalized stage request rate: {self.server.dht.get_normalized_stage_req_rate()}")
 
                 # Reset the request counter
                 self.server.request_within_last_interval = 0
@@ -754,7 +754,7 @@ class Server:
         self.start()
 
         assert self.gpu_worker.ident is not None
-        # logging.info(f"Server {self.server_id} (id: {self.gpu_worker.ident % DIVISOR}) started with location {self.location}.")
+        logging.info(f"Server {self.server_id} (id: {self.gpu_worker.ident % DIVISOR}) started with location {self.location}.")
 
         if run_time > 0:
             time.sleep(run_time)

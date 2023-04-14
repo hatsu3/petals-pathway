@@ -18,7 +18,7 @@ class Simulator:
         self.servers = servers
         self.clients = clients
 
-    def run(self, server_run_time: int = 60, client_run_time: int = 60):
+    def run(self, server_run_time: int = 20, client_run_time: int = 20):
         # Start the server thread
         server_threads = [
             threading.Thread(target=server.run, args=(server_run_time,))
@@ -53,7 +53,7 @@ def run_simulation():
     # Set the policies
     server_sel_policy = ServerSelectionPolicy(model, dht)
     sched_policy = SchedulingEstimationPolicy(model, prof_results)
-    routing_policy = RoutingPolicy(model, dht, update_interval=3)
+    routing_policy = RandomRoutingPolicy(model, dht, update_interval=3)
     stage_assign_policy = RequestRateStageAssignmentPolicy(model, dht)
 
     # Set low number of servers and clients, for testing
@@ -100,7 +100,7 @@ def run_simulation():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
     with open('trace.json', 'a') as f:
         f.write(f"[\n")
     run_simulation()
