@@ -98,6 +98,7 @@ class Client:
         while self.is_running:
             try:
                 server_id = self.server_sel_policy.choose_server(request)
+                assert server_id is not None
                 logging.debug(f"Client {self.client_id} is sending server {server_id} request {request.request_id} .")
 
                 # Simulate communication latency
@@ -123,6 +124,7 @@ class Client:
                         continue
                     except socket.timeout:
                         logging.warning(f"Client {self.client_id} sending to server {server_id} request {request.request_id} timed out.")
+                        continue
                 break
             except ConnectionRefusedError:
                 continue

@@ -311,10 +311,13 @@ class RequestRouter(threading.Thread):
 
         # Send the response to the client
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((request.client_ip, request.client_port))
-            response = InferResponse(request, result, self.server.server_id)
-            sock.sendall(json.dumps(response.to_json()).encode())
-        # logging.info(f"Server {self.server.server_id} responded to {request.request_id}.")
+            try:
+                sock.connect((request.client_ip, request.client_port))
+                response = InferResponse(request, result, self.server.server_id)
+                sock.sendall(json.dumps(response.to_json()).encode())
+                logging.debug(f"Server {self.server.server_id} responded to {request.request_id}.")
+            except ConnectionResetError:
+                pass
 
     def run(self):
         while self.server.is_running:
@@ -708,25 +711,26 @@ class Server:
 
         # wait for all threads to finish
         self.connection_handler.join()
-        # logging.debug(f"Server {self.server_id} stopped the connection handler.")
+        logging.debug(f"Server {self.server_id} stopped the connection handler.")
         self.request_priortizer.join()
-        # logging.debug(f"Server {self.server_id} stopped the request prioritizer.")
+        logging.debug(f"Server {self.server_id} stopped the request prioritizer.")
         self.gpu_worker.join()
-        # logging.debug(f"Server {self.server_id} stopped the gpu worker.")
+        logging.debug(f"Server {self.server_id} stopped the gpu worker.")
         for router in self.request_routers:
             router.join()
-        # logging.debug(f"Server {self.server_id} stopped the requster routers.")
+        logging.debug(f"Server {self.server_id} stopped the requster routers.")
         self.dht_announcer.join()
-        # logging.debug(f"Server {self.server_id} stopped the dht announcer.")
+        logging.debug(f"Server {self.server_id} stopped the dht announcer.")
         self.stage_rebalancer.join()
-        # logging.debug(f"Server {self.server_id} stopped the stage rebalancer.")
+        logging.debug(f"Server {self.server_id} stopped the stage rebalancer.")
 
         # finalize termination and remove the server from the DHT
         assert self.server_id is not None
         self.dht.delete_server(self.server_id)
+        logging.debug(f"Server {self.server_id} deleted its info from dht.")
         self.hosted_stages.clear()
 
-        # logging.debug(f"Server {self.server_id} stopped.")
+        logging.debug(f"Server {self.server_id} stopped.")
 
     def run(self, run_time: float):
         self.start()
