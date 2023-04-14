@@ -201,4 +201,4 @@ plt.xlabel('Policy')
 plt.ylabel('Average Latency (ms)')
 plt.title('Policy Effects on Latency')
 
-plt.show()
+plt.savefig('./policy-vs-latency.png')
