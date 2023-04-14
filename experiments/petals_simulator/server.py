@@ -490,7 +490,7 @@ class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
         # if the current load is lower than the average load, we should add more servers
         # we pick a few stages with the lowest fulfillment scores
         if target_load > current_load:
-            while target_load > current_load:
+            while target_load > current_load and len(fulfillment_scores) > 0:
                 candidate = min(fulfillment_scores, key=fulfillment_scores.get) # type: ignore
                 current_stages.append(candidate)
                 current_load += req_rate[candidate] / (num_stage_replicas[candidate] + 1)
@@ -499,22 +499,19 @@ class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
         # if the current load is higher than the average load, we should remove some servers
         # we remove a few stages with the highest fulfillment scores
         elif target_load < current_load:
-            while target_load < current_load:
-                curr_stg_scores = {
-                    stage: fulfillment_scores[stage] 
-                    for stage in current_stages
-                    if stage in fulfillment_scores
-                }
-
-                # if there are no more stages to remove, break
-                if len(curr_stg_scores) == 0:
-                    break
-                
+            curr_stg_scores = {
+                stage: fulfillment_scores[stage] 
+                for stage in current_stages
+                if stage in fulfillment_scores
+            }
+            
+            while target_load < current_load and len(curr_stg_scores) > 0:                
                 candidate = max(curr_stg_scores, key=curr_stg_scores.get) # type: ignore
                 # only remove the stage if there is at least one replica left
                 if num_stage_replicas[candidate] >= 2:
                     current_stages.remove(candidate)
                     current_load -= req_rate[candidate] / num_stage_replicas[candidate]
+                
                 del curr_stg_scores[candidate]  # no replacement
         
         return current_stages
