@@ -2,7 +2,13 @@ import random
 import threading
 import time
 
-from server import RoutingPolicy, RandomRoutingPolicy, SchedulingPolicy, SchedulingEstimationPolicy, Server, StageAssignmentPolicy, DummyStageAssignmentPolicy, BaselineStageAssignmentPolicy, RequestRateStageAssignmentPolicy
+from server import (
+    Server, 
+    RoutingPolicy, RandomRoutingPolicy, 
+    SchedulingPolicy, SchedulingEstimationPolicy, 
+    StageAssignmentPolicy, AllToAllStageAssignmentPolicy, 
+    UniformStageAssignmentPolicy, RequestRateStageAssignmentPolicy
+)
 from client import Client, RequestMode, ServerSelectionPolicy
 from dht import DistributedHashTable
 from stage_profiler import StageProfiler

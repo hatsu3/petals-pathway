@@ -7,7 +7,7 @@ import threading
 import time
 import logging
 from typing import Any
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from geopy import Point
 
@@ -97,7 +97,7 @@ class GPUWorker(threading.Thread):
 
 
 # A scheduling policy that determines the priority of a task
-class SchedulingPolicy:
+class SchedulingPolicy(ABC):
     def __init__(self, model: MultiTaskModel):
         self.model = model
 
@@ -106,11 +106,7 @@ class SchedulingPolicy:
         pass
 
 
-class BaselineSchedulingPolicy:
-    def __init__(self, model: MultiTaskModel):
-        self.model = model
-
-    @abstractmethod
+class BaselineSchedulingPolicy(ABC):
     def calculate_priority(self, task: GPUTask) -> float:
         return random.uniform(0, 100)
 
@@ -120,7 +116,7 @@ class SchedulingEstimationPolicy(SchedulingPolicy):
         super().__init__(model)
         self.profiling_results = profiling_results
     
-    def estimate_time_to_completion(self, task: GPUTask):
+    def _estimate_time_to_completion(self, task: GPUTask):
         estimation = 0.0
         task_name = task.request.task_name
         stage_name = self.model.get_stage(task_name, task.request.next_stage_idx).name
@@ -133,7 +129,7 @@ class SchedulingEstimationPolicy(SchedulingPolicy):
     def calculate_priority(self, task: GPUTask) -> float:
         # estimated_completion_time = current_time - timestamp + estimate_time_to_completion
         # the lower priority, the earlier to be scheduled, so negate this expression
-        return -(time.time() / 1e3 - task.request.timestamp / 1e3 + self.estimate_time_to_completion(task))
+        return -(time.time() / 1e3 - task.request.timestamp / 1e3 + self._estimate_time_to_completion(task))
 
 
 # A thread that prioritizes tasks based on the scheduling policy
@@ -217,15 +213,36 @@ class ConnectionHandler(threading.Thread):
                         continue
 
 
-# A routing policy that determines which downstream server to send a request to
-# based on information from the DHT
-class RoutingPolicy:
+class RoutingPolicy(ABC):
+    
+    """A policy that determines which downstream server to send a request to
+    based on information from the DHT"""
+
     def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int):
         self.model = model
         self.dht = dht
         self.update_interval = update_interval
         self.last_update = 0
         self.update_if_needed()
+
+    @abstractmethod
+    def route(self, request: InferRequest) -> int:
+        pass
+    
+    def _update(self):
+        pass
+
+    def update_if_needed(self):
+        current_time = time.time()
+        if current_time - self.last_update > self.update_interval:
+            self._update()
+        self.last_update = time.time()
+
+
+class LoadBasedRoutingPolicy(RoutingPolicy):
+
+    """Chooses a downstream server to send a request to based on
+    the load of the server (estimated by queue length)"""
 
     def route(self, request: InferRequest) -> int:
         # Get all servers currently serving needed stage
@@ -241,26 +258,12 @@ class RoutingPolicy:
             return possible_servers[0]
         else:
             return -1
+
+
+class RandomRoutingPolicy(RoutingPolicy):
     
-    def _update(self):
-        pass
-
-    def update_if_needed(self):
-        current_time = time.time()
-        if current_time - self.last_update > self.update_interval:
-            self._update()
-        self.last_update = time.time()
-
-
-# Baseline (random) routing policy
-class RandomRoutingPolicy:
-    # Update interval is probably not used, but keeping things uniform
-    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int):
-        self.model = model
-        self.dht = dht
-        self.update_interval = update_interval
-        self.last_update = 0
-        self.update_if_needed()
+    """Randomly chooses a downstream server to send a request to
+    based on information from the DHT"""
 
     def route(self, request: InferRequest) -> int:
         # Get all servers serving a given stage
@@ -272,15 +275,6 @@ class RandomRoutingPolicy:
             return random.choice(possible_servers)
         else:
             return -1
-
-    def _update(self):
-        pass
-
-    def update_if_needed(self):
-        current_time = time.time()
-        if current_time - self.last_update > self.update_interval:
-            self._update()
-        self.last_update = time.time()
 
 
 class RequestRouter(threading.Thread):
@@ -413,7 +407,10 @@ class RequestRouter(threading.Thread):
                     self.server.task_pool.put(task)
 
 
-class StageAssignmentPolicy:
+class StageAssignmentPolicy(ABC):
+
+    """A policy that assigns stages to servers"""
+
     def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):
         self.model = model
         self.dht = dht
@@ -423,46 +420,76 @@ class StageAssignmentPolicy:
         pass
 
 
-class DummyStageAssignmentPolicy(StageAssignmentPolicy):
+class AllToAllStageAssignmentPolicy(StageAssignmentPolicy):
+
+    """A policy that assigns all stages to all servers"""
+
     def assign_stages(self, current_stages: list[str]) -> list[str]:
         return [stage.name for stage in self.model.get_stages()]
  
 
-class BaselineStageAssignmentPolicy(StageAssignmentPolicy):
+class UniformStageAssignmentPolicy(StageAssignmentPolicy):
+
+    """A policy that assigns stages to servers based on 
+    the number of servers that are serving the stage. 
+    Ideally, each stage should have the same number of replicas"""
+
     def assign_stages(self, current_stages: list[str]) -> list[str]:
+        # Get the number of servers that are serving each stage
         stages = self.model.get_stages()
-        serving_servers = {stage.name: len(self.dht.get_servers_with_stage(stage.name)) for stage in stages}
+        stage_num_replicas = {
+            stage.name: len(self.dht.get_servers_with_stage(stage.name)) 
+            for stage in stages
+        }
+
+        # Get the total number of servers in the swarm
         number_of_servers = self.dht.get_number_of_servers()
-        if number_of_servers > 0:
-            for stage_name, number_of_server in serving_servers.items():
-                if number_of_server < 1:
-                    current_stages.append(stage_name)
-            average_load = len(stages) / self.dht.get_number_of_servers()
-            if average_load > len(current_stages):
-                while average_load > len(current_stages):
-                    # pick the stage with the least number of servers
-                    candidate = min(serving_servers, key=serving_servers.get) # type: ignore
-                    current_stages.append(candidate)
-                    del serving_servers[candidate]
-                return current_stages
-            else:
-                to_restore = []
-                redundant = {stage: serving_servers[stage] for stage in current_stages}
-                while average_load < len(current_stages) and len(redundant) != 0:
-                    candidate = max(redundant, key=redundant.get)
-                    current_stages.remove(candidate)
-                    del redundant[candidate]
-                    # flip a coin to reduce the possibility
-                    # that all servers drop this stage
-                    if random.randint(0, 99) % 5:
-                        to_restore.append(candidate)
-                current_stages.extend(to_restore)
-                return current_stages
+        assert number_of_servers > 0, "There should be at least one server in the swarm"
+        
+        # Serve all stages that are not being served by any server
+        for stage_name, num_replicas in stage_num_replicas.items():
+            if num_replicas < 1:
+                assert stage_name not in current_stages
+                current_stages.append(stage_name)
+        
+        # Calculate the average number of stages served by each server
+        average_load = sum(stage_num_replicas.values()) / self.dht.get_number_of_servers()
+
+        # If this server is serving less stages than the average, add more stages
+        if average_load > len(current_stages):
+            candidate_num_replicas = {
+                stage: stage_num_replicas[stage]
+                for stage in stage_num_replicas
+                if stage not in current_stages
+            }
+            while average_load > len(current_stages) and len(candidate_num_replicas) != 0:
+                # Pick the stage with the least number of replicas
+                candidate = min(candidate_num_replicas, key=candidate_num_replicas.get) # type: ignore
+                current_stages.append(candidate)
+                del candidate_num_replicas[candidate]
+        
+        # If this server is serving more stages than the average, remove some stages
         else:
-            return []
+            candidate_num_replicas = {
+                stage: stage_num_replicas[stage] 
+                for stage in current_stages
+            }
+            while average_load < len(current_stages) and len(candidate_num_replicas) != 0:
+                # Pick the stage with the most number of replicas
+                candidate = max(candidate_num_replicas, key=candidate_num_replicas.get) # type: ignore
+                # Only remove the stage if there are at least one other server serving it
+                if candidate_num_replicas[candidate] > 1:
+                    current_stages.remove(candidate)
+                del candidate_num_replicas[candidate]
+        
+        return current_stages
 
 
 class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
+
+    """A policy that assigns stages to servers based on the request rate of the stage.
+    Ideally, workload should be balanced across servers"""
+    
     # this function is only called when a server is online or starting up (current_stages is empty)
     # which means current_stages are reflected in the DHT
     def assign_stages(self, current_stages: list[str]) -> list[str]:
