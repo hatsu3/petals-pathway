@@ -1,20 +1,17 @@
 import random
 import threading
-import time
 
-from server import (
-    Server, 
-    RoutingPolicy, RandomRoutingPolicy, 
-    SchedulingPolicy, SchedulingEstimationPolicy, 
+from server import Server
+from client import Client, RequestMode, ServerSelectionPolicy
+from dht import DistributedHashTable
+from latency_estimator import LatencyEstimator, generate_random_location
+from utils import get_dummy_model_and_prof_results
+from scheduling import RandomSchedulingPolicy, LatencyAwareSchedulingPolicy
+from routing import RoutingPolicy, RandomRoutingPolicy
+from stage_assignment import (
     StageAssignmentPolicy, AllToAllStageAssignmentPolicy, 
     UniformStageAssignmentPolicy, RequestRateStageAssignmentPolicy
 )
-from client import Client, RequestMode, ServerSelectionPolicy
-from dht import DistributedHashTable
-from stage_profiler import StageProfiler
-from multitask_model import MultiTaskModel, Stage
-from latency_estimator import LatencyEstimator, generate_random_location
-from utils import get_dummy_model_and_prof_results
 
 import logging
 
@@ -57,8 +54,8 @@ def run_simulation():
     latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
 
     # Set the policies
-    server_sel_policy = ServerSelectionPolicy(model, dht)
-    sched_policy = SchedulingEstimationPolicy(model, prof_results)
+    server_sel_policy = ServerSelectionPolicy(model, dht, update_interval=3)
+    sched_policy = LatencyAwareSchedulingPolicy(model, prof_results)
     routing_policy = RandomRoutingPolicy(model, dht, update_interval=3)
     stage_assign_policy = RequestRateStageAssignmentPolicy(model, dht)
 
@@ -97,8 +94,7 @@ def run_simulation():
             latency_est=latency_est,
             server_sel_policy=server_sel_policy,
             request_mode=RequestMode.POISSON,
-            request_avg_interval=1,
-            update_interval=5
+            request_avg_interval=1
         ))
 
     simulator = Simulator(servers, clients)

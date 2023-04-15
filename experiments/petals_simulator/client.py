@@ -3,10 +3,11 @@ import socket
 import json
 import uuid
 import random
-from enum import Enum
+import logging
 import threading
 import time
 import os
+from enum import Enum
 
 from geopy import Point
 
@@ -14,40 +15,12 @@ from dht import DistributedHashTable, ServerNonExistentException
 from multitask_model import MultiTaskModel
 from messages import InferRequest, InferResponse
 from latency_estimator import LatencyEstimator
+from routing import ServerSelectionPolicy
 
-import logging
 
 class RequestMode(Enum):
     UNIFORM = 1
     POISSON = 2
-
-
-# Policy for selecting which server in the swarm to send a request to
-# options: random, closest, least loaded, etc.
-class ServerSelectionPolicy:
-    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):
-        self.model = model
-        self.dht = dht
-
-    """
-    Choose the server that can serve the first stage of the new request. 
-    Return the index of the best server
-    """
-    def choose_server(self, request: InferRequest) -> int:
-        # Pick the next stage of the model that is currently running.
-        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-        # Find all the servers serving that stage and are online.
-        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
-
-        if len(possible_servers) > 0:
-            # Find the server with smallest current load, and return its IP and port.
-            possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
-            return possible_servers[0]
-        else:
-            return -1
-
-    def update(self):
-        pass
 
 
 class Client:
@@ -62,8 +35,7 @@ class Client:
                  latency_est: LatencyEstimator,
                  server_sel_policy: ServerSelectionPolicy, 
                  request_mode=RequestMode.POISSON,
-                 request_avg_interval=5, 
-                 update_interval=10):
+                 request_avg_interval=5):
         
         self.ip = ip
         self.port = port
@@ -76,7 +48,6 @@ class Client:
         self.server_sel_policy = server_sel_policy
         self.request_mode = request_mode
         self.request_avg_interval = request_avg_interval
-        self.update_interval = update_interval
         
         self.is_running = True
         self.pending_requests = {}
@@ -97,7 +68,8 @@ class Client:
         server_id = -1
         while self.is_running:
             try:
-                server_id = self.server_sel_policy.choose_server(request)
+                self.server_sel_policy.update_if_needed()
+                server_id = self.server_sel_policy.route(request)
                 assert server_id is not None
                 logging.debug(f"Client {self.client_id} is sending server {server_id} request {request.request_id} .")
 
@@ -200,21 +172,14 @@ class Client:
 
             time.sleep(self.get_request_interval())
 
-    def update_server_sel_policy(self):
-        while self.is_running:
-            self.server_sel_policy.update()
-            time.sleep(self.update_interval)
-
     def run(self, run_time: float):
         request_thread = threading.Thread(target=self.send_requests)
         listener_thread = threading.Thread(target=self.connection_handler)
         response_thread = threading.Thread(target=self.receive_responses)
-        update_policy_thread = threading.Thread(target=self.update_server_sel_policy)
 
         request_thread.start()
         listener_thread.start()
         response_thread.start()
-        update_policy_thread.start()
 
         if run_time > 0:
             time.sleep(run_time)
@@ -226,8 +191,6 @@ class Client:
         logging.debug(f"Client {self.client_id} stopped the listener thread.")
         response_thread.join()
         logging.debug(f"Client {self.client_id} stopped the response thread.")
-        update_policy_thread.join()
-        logging.debug(f"Client {self.client_id} stopped the updating-policy thread.")
 
         logging.debug(f"Client {self.client_id} stopped.")
 

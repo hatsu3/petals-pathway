@@ -1,5 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
-import sys
 import json
 import queue
 import socket
@@ -7,75 +5,27 @@ import threading
 import time
 import logging
 from typing import Any
-from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 
 from geopy import Point
 
-import random
-
-from multitask_model import MultiTaskModel, Stage
+from multitask_model import MultiTaskModel
 from latency_estimator import LatencyEstimator
 from dht import DistributedHashTable, ServerStatus, ServerNonExistentException
 from messages import InferRequest, InferResponse
+from scheduling import SchedulingPolicy
 from stage_profiler import ProfilingResults
-
-from trace_visualizer import TraceVisualizer, DIVISOR
-
-
-def simulated_execution(stage: Stage, batch_size: int, prof_results: ProfilingResults):
-    latency = prof_results.get_latency(stage.name, batch_size)
-    time.sleep(latency / 1000)
+from stage_assignment import StageAssignmentPolicy
+from routing import RoutingPolicy
+from trace_visualizer import DIVISOR
+from utils import GPUTask
 
 
-TASK_FUNC_REGISTRY = {
-    "simulated_execution": simulated_execution,
-}
-
-
-# Simulates executing a stage of the multi-task model on GPU
-class GPUTask:
-    def __init__(self, request: InferRequest, func_name: str, args=(), kwargs={}):
-        self.request = request
-
-        # Store the function and arguments
-        self.func_name = func_name
-        self.function = TASK_FUNC_REGISTRY[func_name]
-        self.args = args
-        self.kwargs = kwargs
-
-        # Use an event to signal completion
-        # An event can have two states: set and unset (also called signaled and unsignaled). 
-        # A thread can wait for an event to be set and another thread can set the event. 
-        self.event = threading.Event()
-        
-        # Store the result of the function and any exception
-        self.result = None
-        self.exception = None
-
-    # Execute the function and store the result
-    # Called by the worker thread
-    @TraceVisualizer(log_file_path='trace.json')
-    def execute(self):
-        try:
-            self.result = self.function(*self.args, **self.kwargs)
-        except Exception as e:
-            self.exception = e
-        finally:
-            # In either case, set the event to signal completion
-            self.event.set()
-
-    # Wait for the task to complete and return the result
-    # Called by the thread that submitted the task
-    def wait(self):
-        self.event.wait()
-        if self.exception:
-            raise self.exception
-        return self.result 
-
-
-# Simulates a GPU executing tasks one at a time
-# Refer to ModuleContainer for subclassing threading.Thread
 class GPUWorker(threading.Thread):
+    
+    """Simulates a GPU executing tasks one at a time
+    Refer to ModuleContainer for subclassing threading.Thread"""
+    
     def __init__(self, server: "Server"):
         super().__init__()
         self.server = server
@@ -96,44 +46,10 @@ class GPUWorker(threading.Thread):
             self.completed_queue.put(task)
 
 
-# A scheduling policy that determines the priority of a task
-class SchedulingPolicy(ABC):
-    def __init__(self, model: MultiTaskModel):
-        self.model = model
-
-    @abstractmethod
-    def calculate_priority(self, task: GPUTask) -> float:
-        pass
-
-
-class BaselineSchedulingPolicy(ABC):
-    def calculate_priority(self, task: GPUTask) -> float:
-        return random.uniform(0, 100)
-
-
-class SchedulingEstimationPolicy(SchedulingPolicy):
-    def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
-        super().__init__(model)
-        self.profiling_results = profiling_results
-    
-    def _estimate_time_to_completion(self, task: GPUTask):
-        estimation = 0.0
-        task_name = task.request.task_name
-        stage_name = self.model.get_stage(task_name, task.request.next_stage_idx).name
-        while stage_name is not None:
-            estimation += self.profiling_results.get_latency(stage_name, batch_size=1)
-            stage_name = self.model.get_next_stage(stage_name, task_name)
-            
-        return estimation
-    
-    def calculate_priority(self, task: GPUTask) -> float:
-        # estimated_completion_time = current_time - timestamp + estimate_time_to_completion
-        # the lower priority, the earlier to be scheduled, so negate this expression
-        return -(time.time() / 1e3 - task.request.timestamp / 1e3 + self._estimate_time_to_completion(task))
-
-
-# A thread that prioritizes tasks based on the scheduling policy
 class RequestPriortizer(threading.Thread):
+
+    """A thread that prioritizes tasks based on the scheduling policy"""
+    
     def __init__(self, server: "Server"):
         super().__init__()
         self.server = server
@@ -155,10 +71,12 @@ class RequestPriortizer(threading.Thread):
             self.priority_queue.put((priority, time.time(), task))
 
 
-# NOTE: currently we do not consider batching and the batch size is always 1
-# A thread that handles incoming connections from clients
-# deserialized tasks and adds them to the task queue
 class ConnectionHandler(threading.Thread):
+    
+    """currently we do not consider batching and the batch size is always 1
+    A thread that handles incoming connections from clients
+    deserialized tasks and adds them to the task queue"""
+
     def __init__(self, server: "Server", num_workers: int = 20):
         super().__init__()
         self.server = server
@@ -211,70 +129,6 @@ class ConnectionHandler(threading.Thread):
                         executor.submit(self._handle_connection, conn, addr)
                     except socket.timeout:
                         continue
-
-
-class RoutingPolicy(ABC):
-    
-    """A policy that determines which downstream server to send a request to
-    based on information from the DHT"""
-
-    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int):
-        self.model = model
-        self.dht = dht
-        self.update_interval = update_interval
-        self.last_update = 0
-        self.update_if_needed()
-
-    @abstractmethod
-    def route(self, request: InferRequest) -> int:
-        pass
-    
-    def _update(self):
-        pass
-
-    def update_if_needed(self):
-        current_time = time.time()
-        if current_time - self.last_update > self.update_interval:
-            self._update()
-        self.last_update = time.time()
-
-
-class LoadBasedRoutingPolicy(RoutingPolicy):
-
-    """Chooses a downstream server to send a request to based on
-    the load of the server (estimated by queue length)"""
-
-    def route(self, request: InferRequest) -> int:
-        # Get all servers currently serving needed stage
-        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
-
-        if len(possible_servers) > 0:
-            # Return the server with the smallest load
-            try:
-                possible_servers.sort(key = lambda x: self.dht.get_server_instant_load(x))
-            except ServerNonExistentException:
-                return -1
-            return possible_servers[0]
-        else:
-            return -1
-
-
-class RandomRoutingPolicy(RoutingPolicy):
-    
-    """Randomly chooses a downstream server to send a request to
-    based on information from the DHT"""
-
-    def route(self, request: InferRequest) -> int:
-        # Get all servers serving a given stage
-        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
-
-        if len(possible_servers) > 0:
-            # Return random server in the list
-            return random.choice(possible_servers)
-        else:
-            return -1
 
 
 class RequestRouter(threading.Thread):
@@ -407,163 +261,6 @@ class RequestRouter(threading.Thread):
                     self.server.task_pool.put(task)
 
 
-class StageAssignmentPolicy(ABC):
-
-    """A policy that assigns stages to servers"""
-
-    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable):
-        self.model = model
-        self.dht = dht
-
-    @abstractmethod
-    def assign_stages(self, current_stages: list[str]) -> list[str]:
-        pass
-
-
-class AllToAllStageAssignmentPolicy(StageAssignmentPolicy):
-
-    """A policy that assigns all stages to all servers"""
-
-    def assign_stages(self, current_stages: list[str]) -> list[str]:
-        return [stage.name for stage in self.model.get_stages()]
- 
-
-class UniformStageAssignmentPolicy(StageAssignmentPolicy):
-
-    """A policy that assigns stages to servers based on 
-    the number of servers that are serving the stage. 
-    Ideally, each stage should have the same number of replicas"""
-
-    def assign_stages(self, current_stages: list[str]) -> list[str]:
-        # Get the number of servers that are serving each stage
-        stages = self.model.get_stages()
-        stage_num_replicas = {
-            stage.name: len(self.dht.get_servers_with_stage(stage.name)) 
-            for stage in stages
-        }
-
-        # Get the total number of servers in the swarm
-        number_of_servers = self.dht.get_number_of_servers()
-        assert number_of_servers > 0, "There should be at least one server in the swarm"
-        
-        # Serve all stages that are not being served by any server
-        for stage_name, num_replicas in stage_num_replicas.items():
-            if num_replicas < 1:
-                assert stage_name not in current_stages
-                current_stages.append(stage_name)
-        
-        # Calculate the average number of stages served by each server
-        average_load = sum(stage_num_replicas.values()) / self.dht.get_number_of_servers()
-
-        # If this server is serving less stages than the average, add more stages
-        if average_load > len(current_stages):
-            candidate_num_replicas = {
-                stage: stage_num_replicas[stage]
-                for stage in stage_num_replicas
-                if stage not in current_stages
-            }
-            while average_load > len(current_stages) and len(candidate_num_replicas) != 0:
-                # Pick the stage with the least number of replicas
-                candidate = min(candidate_num_replicas, key=candidate_num_replicas.get) # type: ignore
-                current_stages.append(candidate)
-                del candidate_num_replicas[candidate]
-        
-        # If this server is serving more stages than the average, remove some stages
-        else:
-            candidate_num_replicas = {
-                stage: stage_num_replicas[stage] 
-                for stage in current_stages
-            }
-            while average_load < len(current_stages) and len(candidate_num_replicas) != 0:
-                # Pick the stage with the most number of replicas
-                candidate = max(candidate_num_replicas, key=candidate_num_replicas.get) # type: ignore
-                # Only remove the stage if there are at least one other server serving it
-                if candidate_num_replicas[candidate] > 1:
-                    current_stages.remove(candidate)
-                del candidate_num_replicas[candidate]
-        
-        return current_stages
-
-
-class RequestRateStageAssignmentPolicy(StageAssignmentPolicy):
-
-    """A policy that assigns stages to servers based on the request rate of the stage.
-    Ideally, workload should be balanced across servers"""
-    
-    # this function is only called when a server is online or starting up (current_stages is empty)
-    # which means current_stages are reflected in the DHT
-    def assign_stages(self, current_stages: list[str]) -> list[str]:
-        stages = self.model.get_stages()
-        req_rate = self.dht.get_normalized_stage_req_rate()  # stage name -> normalized req rate
-
-        # calculate the fulfillment score for each stage as num_replicas / req_rate
-        # the lower the score, the higher priority we should allocate more servers to the stage
-        def calc_fulfillment_score(stage: Stage) -> float:
-            num_replicas = len(self.dht.get_servers_with_stage(stage.name))
-            if req_rate[stage.name] == 0:
-                return sys.maxsize  # handle zero division
-            else:
-                return num_replicas / req_rate[stage.name]
-        
-        fulfillment_scores = {
-            stage.name: calc_fulfillment_score(stage) for stage in stages
-        }
-
-        number_of_servers = self.dht.get_number_of_servers()
-        assert number_of_servers > 0, "There should be at least one server in the system"
-        
-        # we calculate the current load assuming that for each stage the load is distributed evenly
-        # across all replicas
-        num_stage_replicas = {
-            stage.name: len(self.dht.get_servers_with_stage(stage.name)) 
-            for stage in stages
-        }
-
-        current_load = sum([
-            req_rate[stage] / (num_stage_replicas[stage] + 1)
-            for stage in current_stages
-        ])
-
-        # serve all stages that are not currently being served by any server
-        for stage_name, num_replicas in num_stage_replicas.items():
-            if num_replicas == 0:
-                current_stages.append(stage_name)
-                current_load += req_rate[stage_name] / (num_stage_replicas[stage_name] + 1)
-                del fulfillment_scores[stage_name]  # no replacement
-
-        # our goal is to make the load of each server as close to the average load as possible
-        target_load = 1 / number_of_servers
-        
-        # if the current load is lower than the average load, we should add more servers
-        # we pick a few stages with the lowest fulfillment scores
-        if target_load > current_load:
-            while target_load > current_load and len(fulfillment_scores) > 0:
-                candidate = min(fulfillment_scores, key=fulfillment_scores.get) # type: ignore
-                current_stages.append(candidate)
-                current_load += req_rate[candidate] / (num_stage_replicas[candidate] + 1)
-                del fulfillment_scores[candidate]  # no replacement
-        
-        # if the current load is higher than the average load, we should remove some servers
-        # we remove a few stages with the highest fulfillment scores
-        elif target_load < current_load:
-            curr_stg_scores = {
-                stage: fulfillment_scores[stage] 
-                for stage in current_stages
-                if stage in fulfillment_scores
-            }
-            
-            while target_load < current_load and len(curr_stg_scores) > 0:                
-                candidate = max(curr_stg_scores, key=curr_stg_scores.get) # type: ignore
-                # only remove the stage if there is at least one replica left
-                if num_stage_replicas[candidate] >= 2:
-                    current_stages.remove(candidate)
-                    current_load -= req_rate[candidate] / num_stage_replicas[candidate]
-                
-                del curr_stg_scores[candidate]  # no replacement
-        
-        return current_stages
-
-
 class DHTAnnouncer(threading.Thread):
     def __init__(self, server: "Server"):
         super().__init__()
@@ -642,10 +339,12 @@ class StageRebalancer(threading.Thread):
             time.sleep(self.rebalance_interval)
 
 
-# A server that potentially hosts multiple stages of the multi-task model
-# We assume that the server has a single GPU that can only execute one stage at a time
-# Each server is assigned a virtual location to simulate the communication latency between servers
 class Server:
+
+    """A server that potentially hosts multiple stages of the multi-task model.
+    We assume that the server has a single GPU that can only execute one stage at a time
+    Each server is assigned a virtual location to simulate the communication latency between servers"""
+    
     def __init__(self, 
                  ip: str,
                  port: int,
