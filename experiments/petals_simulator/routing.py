@@ -36,7 +36,7 @@ class RoutingPolicy(ABC):
 """Server-side routing policies"""
 
 
-class LoadBasedRoutingPolicy(RoutingPolicy):
+class QueueLengthRoutingPolicy(RoutingPolicy):
 
     """Chooses a downstream server to send a request to based on
     the load of the server (estimated by queue length)"""
@@ -49,7 +49,7 @@ class LoadBasedRoutingPolicy(RoutingPolicy):
         if len(possible_servers) > 0:
             # Return the server with the smallest load
             try:
-                possible_servers.sort(key = lambda x: self.dht.get_server_instant_load(x))
+                possible_servers.sort(key = lambda x: self.dht.get_server_queue_length(x))
             except ServerNonExistentException:
                 return -1
             return possible_servers[0]
@@ -78,6 +78,10 @@ class RequestRateRoutingPolicy(RoutingPolicy):
         
         """Chooses a downstream server to send a request to based on
         the request rate of the server"""
+
+        def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int, gamma: float = 0.5):
+            super().__init__(model, dht, update_interval)
+            self.gamma = gamma
     
         def route(self, request: InferRequest) -> int:
             # Get all servers currently serving needed stage
@@ -93,8 +97,7 @@ class RequestRateRoutingPolicy(RoutingPolicy):
                 # the probability of sampling a server is inversely proportional to its request rate
                 # we introduce a gamma parameter to control the influence of request rate
                 # we also add 1 to the request rate to avoid division by 0
-                gamma = 0.5
-                weights = [(self.dht.get_server_load(x) + 1) ** -gamma for x in possible_servers]
+                weights = [(self.dht.get_server_load(x) + 1) ** -self.gamma for x in possible_servers]
                 chosen_servers = random.choices(possible_servers, weights=weights, k=1)
                 return chosen_servers[0]
             except ServerNonExistentException:

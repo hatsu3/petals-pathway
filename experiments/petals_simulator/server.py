@@ -268,8 +268,8 @@ class DHTAnnouncer(threading.Thread):
         self.server = server
         self.dht = server.dht
         self.announce_interval = server.announce_interval
-        self.load_ema = 0.0
-        self.load_ema_alpha = 0.1
+        self.req_rate_ema = 0.0
+        self.req_rate_ema_alpha = 0.1
 
     """
     Let the DHT know of the current status of this server.
@@ -291,8 +291,8 @@ class DHTAnnouncer(threading.Thread):
         self.dht.modify_server_info(server_id, "port", self.server.port)
         self.dht.modify_server_info(server_id, "location", self.server.location)
         self.dht.modify_server_info(server_id, "stages", self.server.hosted_stages)
-        self.dht.modify_server_info(server_id, "instant_load", self.server.task_pool.qsize() + self.server.priority_queue.qsize())
-        self.dht.modify_server_info(server_id, "load", self.load_ema)
+        self.dht.modify_server_info(server_id, "queue_length", self.server.task_pool.qsize() + self.server.priority_queue.qsize())
+        self.dht.modify_server_info(server_id, "request_rate", self.req_rate_ema)
         self.dht.modify_server_info(server_id, "status", ServerStatus.ONLINE)
         self.dht.update_stage_req_rate(self.server.request_within_last_interval_per_stage)
 
@@ -301,11 +301,12 @@ class DHTAnnouncer(threading.Thread):
             try:
                 # Update the EMA estimate of the load
                 latest_req_rate = self.server.request_within_last_interval
-                self.load_ema = self.load_ema * (1 - self.load_ema_alpha) + latest_req_rate * self.load_ema_alpha
+                alpha = self.req_rate_ema_alpha
+                self.req_rate = self.req_rate_ema * (1 - alpha) + latest_req_rate * alpha
                 
                 # Announce the current status
                 assert self.server.gpu_worker.ident is not None
-                logging.debug(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {self.load_ema} ({len(self.server.hosted_stages)}).")
+                logging.debug(f"Thread {self.server.gpu_worker.ident % DIVISOR} req_rate: {self.req_rate_ema} ({len(self.server.hosted_stages)}).")
                 self._announce()
                 logging.debug(f"Normalized stage request rate: {self.server.dht.get_normalized_stage_req_rate()}")
 
@@ -424,10 +425,6 @@ class Server:
         # e.g. if a server is overloaded, it may be assigned fewer stages
         # e.g. if some servers went offline, the remaining servers may be assigned more stages
         self.stage_rebalancer = StageRebalancer(self)
-
-    @property
-    def load_level(self):
-        return self.task_pool.qsize()
 
     def start(self):
         # logging.debug(f"Server {self.server_id} is starting.")

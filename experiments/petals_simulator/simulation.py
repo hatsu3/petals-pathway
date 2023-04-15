@@ -11,7 +11,7 @@ from utils import get_dummy_model_and_prof_results
 from scheduling import RandomSchedulingPolicy, LatencyAwareSchedulingPolicy
 from routing import (
     RoutingPolicy, RandomRoutingPolicy, 
-    LoadBasedRoutingPolicy, RequestRateRoutingPolicy
+    QueueLengthRoutingPolicy, RequestRateRoutingPolicy
 )
 from stage_assignment import (
     StageAssignmentPolicy, AllToAllStageAssignmentPolicy, 

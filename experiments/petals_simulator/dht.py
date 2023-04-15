@@ -55,7 +55,7 @@ class ExpiringSet:
 # NOTE: currently we do not simulate latency in updating and querying the DHT
 class DistributedHashTable:
 
-    INFO_TYPES = ['ip', 'port', 'location', 'stages', 'instant_load', 'load', 'status']
+    INFO_TYPES = ['ip', 'port', 'location', 'stages', 'queue_length', 'request_rate', 'status']
 
     def __init__(self, model: MultiTaskModel):
         self.lock = threading.Lock()
@@ -134,8 +134,8 @@ class DistributedHashTable:
                 'port': None,
                 'location': None,
                 'stages': [],
-                'instant_load': 0,
-                'load': 0,
+                'queue_length': 0,
+                'request_rate': 0,
                 'status': ServerStatus.OFFLINE
             }
 
@@ -177,10 +177,10 @@ class DistributedHashTable:
             return len(self.server_info)
     
     def get_server_load(self, server_id: int):
-        return self.get_server_info(server_id, 'load')
+        return self.get_server_info(server_id, 'request_rate')
     
-    def get_server_instant_load(self, server_id: int):
-        return self.get_server_info(server_id, 'instant_load')
+    def get_server_queue_length(self, server_id: int):
+        return self.get_server_info(server_id, 'queue_length')
 
     def get_server_ip_port(self, server_id: int):
         with self.lock:
