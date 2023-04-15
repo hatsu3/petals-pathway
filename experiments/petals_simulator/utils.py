@@ -90,7 +90,8 @@ def dag_to_multitask_model(G: nx.DiGraph):
 
 
 # generate fake profiling results (each stage is exactly the same and takes 10ms)
-def get_dummy_model_and_prof_results(num_nodes=100, num_edges=250, stage_latency=10):
+def get_dummy_model_and_prof_results(num_nodes=100, num_edges=250, stage_latency=10, seed=42):
+    random.seed(seed)
     random_graph = generate_random_dag(num_nodes, num_edges)
     model: MultiTaskModel = dag_to_multitask_model(random_graph)
     prof_results = ProfilingResults(

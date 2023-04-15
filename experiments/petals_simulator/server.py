@@ -1,5 +1,6 @@
 import json
 import queue
+import random
 import socket
 import threading
 import time
@@ -267,8 +268,8 @@ class DHTAnnouncer(threading.Thread):
         self.server = server
         self.dht = server.dht
         self.announce_interval = server.announce_interval
-        self.load_window = []
-        self.load_window_size = 3
+        self.load_ema = 0.0
+        self.load_ema_alpha = 0.1
 
     """
     Let the DHT know of the current status of this server.
@@ -291,21 +292,20 @@ class DHTAnnouncer(threading.Thread):
         self.dht.modify_server_info(server_id, "location", self.server.location)
         self.dht.modify_server_info(server_id, "stages", self.server.hosted_stages)
         self.dht.modify_server_info(server_id, "instant_load", self.server.task_pool.qsize() + self.server.priority_queue.qsize())
-        self.dht.modify_server_info(server_id, "load", sum(self.load_window))
+        self.dht.modify_server_info(server_id, "load", self.load_ema)
         self.dht.modify_server_info(server_id, "status", ServerStatus.ONLINE)
         self.dht.update_stage_req_rate(self.server.request_within_last_interval_per_stage)
 
     def run(self):
         while self.server.is_running:
             try:
-                # Update the load window
-                self.load_window.append(self.server.request_within_last_interval)
-                if len(self.load_window) > self.load_window_size:
-                    self.load_window.pop(0)
+                # Update the EMA estimate of the load
+                latest_req_rate = self.server.request_within_last_interval
+                self.load_ema = self.load_ema * (1 - self.load_ema_alpha) + latest_req_rate * self.load_ema_alpha
                 
                 # Announce the current status
                 assert self.server.gpu_worker.ident is not None
-                logging.debug(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {sum(self.load_window)} ({len(self.server.hosted_stages)}).")
+                logging.debug(f"Thread {self.server.gpu_worker.ident % DIVISOR} load: {self.load_ema} ({len(self.server.hosted_stages)}).")
                 self._announce()
                 logging.debug(f"Normalized stage request rate: {self.server.dht.get_normalized_stage_req_rate()}")
 
@@ -315,7 +315,9 @@ class DHTAnnouncer(threading.Thread):
             except ServerNonExistentException:
                 continue
 
-            time.sleep(self.announce_interval)
+            # Add a random offset to avoid all servers announcing at the same time
+            # This is because in simulation, all servers are started at the same time
+            time.sleep(self.announce_interval + random.random())
 
 
 class StageRebalancer(threading.Thread):
@@ -336,7 +338,10 @@ class StageRebalancer(threading.Thread):
                 self.dht.modify_server_info(self.server.server_id, "stages", self.hosted_stages)
             except ServerNonExistentException:
                 continue
-            time.sleep(self.rebalance_interval)
+            
+            # Add a random offset to avoid all servers announcing at the same time
+            # This is because in simulation, all servers are started at the same time
+            time.sleep(self.rebalance_interval + random.random())
 
 
 class Server:

@@ -1,5 +1,6 @@
 import os
 import random
+import logging
 import threading
 
 from server import Server
@@ -8,13 +9,14 @@ from dht import DistributedHashTable
 from latency_estimator import LatencyEstimator, generate_random_location
 from utils import get_dummy_model_and_prof_results
 from scheduling import RandomSchedulingPolicy, LatencyAwareSchedulingPolicy
-from routing import RoutingPolicy, RandomRoutingPolicy, LoadBasedRoutingPolicy
+from routing import (
+    RoutingPolicy, RandomRoutingPolicy, 
+    LoadBasedRoutingPolicy, RequestRateRoutingPolicy
+)
 from stage_assignment import (
     StageAssignmentPolicy, AllToAllStageAssignmentPolicy, 
     UniformStageAssignmentPolicy, RequestRateStageAssignmentPolicy
 )
-
-import logging
 
 
 class Simulator:
@@ -49,7 +51,8 @@ class Simulator:
 
 def run_simulation():
     # Construct dummy model, initialize DHT and get latency estimates
-    model, prof_results = get_dummy_model_and_prof_results(stage_latency=30)
+    # we specify a seed to make the results reproducible
+    model, prof_results = get_dummy_model_and_prof_results(stage_latency=30, seed=42)
     dht = DistributedHashTable(model)
     latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
 
