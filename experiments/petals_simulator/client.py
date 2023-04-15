@@ -107,6 +107,13 @@ class Client:
                 continue
 
     def receive_responses(self):
+        # Create the `e2e_latency` directory if it is not there
+        os.makedirs(f"e2e_latency", exist_ok=True)
+
+        # Delete files in the `e2e_latency` directory
+        if os.path.exists(f"e2e_latency/{self.client_id}.csv"):
+            os.remove(f"e2e_latency/{self.client_id}.csv")
+
         while self.is_running:
             try:
                 conn, addr = self.response_queue.get(timeout=1)
@@ -122,8 +129,6 @@ class Client:
                 del self.pending_requests[response.request_id]
                 logging.info(f"Client {self.client_id} received response from server {server_id} for request {response.request_id}.")
 
-                # Create the `e2e_latency` directory if it is not there
-                os.makedirs(f"e2e_latency", exist_ok=True)
                 # collecting end-to-end latency information for evaluation part
                 with open(f"e2e_latency/{self.client_id}.csv", "a") as f:
                     f.write(f"{self.client_id}, {end_to_end_latency}\n")

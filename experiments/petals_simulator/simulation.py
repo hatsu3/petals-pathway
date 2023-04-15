@@ -1,3 +1,4 @@
+import os
 import random
 import threading
 
@@ -47,9 +48,8 @@ class Simulator:
 
 
 def run_simulation():
-
     # Construct dummy model, initialize DHT and get latency estimates
-    model, prof_results = get_dummy_model_and_prof_results()
+    model, prof_results = get_dummy_model_and_prof_results(stage_latency=30)
     dht = DistributedHashTable(model)
     latency_est = LatencyEstimator.load("data/latency_estimator.pkl")
 
@@ -103,6 +103,8 @@ def run_simulation():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    if os.path.exists('trace.json'):
+        os.remove('trace.json')
     with open('trace.json', 'a') as f:
         f.write(f"[\n")
     run_simulation()
