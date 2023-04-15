@@ -2,6 +2,9 @@ import os
 import csv
 import statistics
 
+import numpy as np
+
+
 # Define a dictionary to store latency data for each client
 client_latency = {}
 
@@ -32,5 +35,8 @@ for client_id, latencies in client_latency.items():
     if len(latencies) > 1:
         stdev_latency = statistics.stdev(latencies)
 
+    p99_latency = np.percentile(latencies, 99)
+
     # Print the results
-    print(f"Client {client_id}: Average latency = {avg_latency:.2f} s, Standard deviation = {stdev_latency:.2f} s")
+    print(f"Client {client_id}: Average latency = {avg_latency:.2f} s, "
+          f"Standard deviation = {stdev_latency:.2f} s, 99th percentile = {p99_latency:.2f} s")
