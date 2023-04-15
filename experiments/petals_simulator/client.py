@@ -15,7 +15,7 @@ from dht import DistributedHashTable, ServerNonExistentException
 from multitask_model import MultiTaskModel
 from messages import InferRequest, InferResponse
 from latency_estimator import LatencyEstimator
-from routing import ServerSelectionPolicy
+from routing import RoutingPolicy
 
 
 class RequestMode(Enum):
@@ -33,7 +33,7 @@ class Client:
                  dht: DistributedHashTable, 
                  model: MultiTaskModel,
                  latency_est: LatencyEstimator,
-                 server_sel_policy: ServerSelectionPolicy, 
+                 server_sel_policy: RoutingPolicy, 
                  request_mode=RequestMode.POISSON,
                  request_avg_interval=5):
         

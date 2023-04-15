@@ -72,25 +72,3 @@ class RandomRoutingPolicy(RoutingPolicy):
             return random.choice(possible_servers)
         else:
             return -1
-
-
-"""Client-side routing policies"""
-
-
-class ServerSelectionPolicy(RoutingPolicy):
-    
-    """Choose the server that can serve the first stage of the new request. 
-    Return the index of the best server"""
-
-    def route(self, request: InferRequest) -> int:
-        # Pick the next stage of the model that is currently running.
-        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-        # Find all the servers serving that stage and are online.
-        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
-
-        if len(possible_servers) > 0:
-            # Find the server with smallest current load, and return its IP and port.
-            possible_servers.sort(key = lambda x: self.dht.get_server_load(x))
-            return possible_servers[0]
-        else:
-            return -1
