@@ -1,3 +1,4 @@
+import os
 import random
 import threading
 import time
@@ -160,7 +161,23 @@ class GPUTask:
         self.event.wait()
         if self.exception:
             raise self.exception
-        return self.result 
+        return self.result
+    
+
+class TraceFile:
+    def __init__(self, file_name):
+        self.file_name = file_name
+
+    def __enter__(self):
+        if os.path.exists(self.file_name):
+            os.remove(self.file_name)
+        
+        with open(self.file_name, 'a') as f:
+            f.write("[\n")
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        with open(self.file_name, 'a') as f:
+            f.write("]\n")
 
 
 if __name__ == "__main__":
