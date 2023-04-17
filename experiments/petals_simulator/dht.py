@@ -176,7 +176,7 @@ class DistributedHashTable:
         with self.lock:
             return len(self.server_info)
     
-    def get_server_load(self, server_id: int):
+    def get_server_request_rate(self, server_id: int):
         return self.get_server_info(server_id, 'request_rate')
     
     def get_server_queue_length(self, server_id: int):

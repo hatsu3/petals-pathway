@@ -76,29 +76,29 @@ class RandomRoutingPolicy(RoutingPolicy):
 
 class RequestRateRoutingPolicy(RoutingPolicy):
         
-        """Chooses a downstream server to send a request to based on
-        the request rate of the server"""
+    """Chooses a downstream server to send a request to based on
+    the request rate of the server"""
 
-        def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int, gamma: float = 0.5):
-            super().__init__(model, dht, update_interval)
-            self.gamma = gamma
-    
-        def route(self, request: InferRequest) -> int:
-            # Get all servers currently serving needed stage
-            next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
-            possible_servers = self.dht.get_servers_with_stage(next_stage.name)
-    
-            # If no servers are available, return -1
-            if len(possible_servers) == 0:
-                return -1
+    def __init__(self, model: MultiTaskModel, dht: DistributedHashTable, update_interval: int, gamma: float = 0.5):
+        super().__init__(model, dht, update_interval)
+        self.gamma = gamma
 
-            try:
-                # randomly sample servers according to their request rate
-                # the probability of sampling a server is inversely proportional to its request rate
-                # we introduce a gamma parameter to control the influence of request rate
-                # we also add 1 to the request rate to avoid division by 0
-                weights = [(self.dht.get_server_load(x) + 1) ** -self.gamma for x in possible_servers]
-                chosen_servers = random.choices(possible_servers, weights=weights, k=1)
-                return chosen_servers[0]
-            except ServerNonExistentException:
-                return -1
+    def route(self, request: InferRequest) -> int:
+        # Get all servers currently serving needed stage
+        next_stage = self.model.get_stage(request.task_name, request.next_stage_idx)
+        possible_servers = self.dht.get_servers_with_stage(next_stage.name)
+
+        # If no servers are available, return -1
+        if len(possible_servers) == 0:
+            return -1
+
+        try:
+            # randomly sample servers according to their request rate
+            # the probability of sampling a server is inversely proportional to its request rate
+            # we introduce a gamma parameter to control the influence of request rate
+            # we also add 1 to the request rate to avoid division by 0
+            weights = [(self.dht.get_server_request_rate(x) + 1) ** -self.gamma for x in possible_servers]
+            chosen_servers = random.choices(possible_servers, weights=weights, k=1)
+            return chosen_servers[0]
+        except ServerNonExistentException:
+            return -1
