@@ -1,4 +1,5 @@
 import os
+import sys
 import csv
 import statistics
 
@@ -8,13 +9,17 @@ import numpy as np
 # Define a dictionary to store latency data for each client
 client_latency = {}
 
-# Set the path to the folder containing the data files
-folder_path = os.path.abspath('e2e_latency')
+if len(sys.argv) < 2:
+    print('Please provide the path to the directory containing the CSV files as a command line argument')
+    sys.exit()
+
+# extract the directory path from the command line argument
+directory = os.path.abspath(sys.argv[1])
 
 # Loop through all the files in the folder
-for filename in os.listdir(folder_path):
+for filename in os.listdir(directory):
     # Read the file and parse each line
-    with open(os.path.join(folder_path, filename), 'r') as csvfile:
+    with open(os.path.join(directory, filename), 'r') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
             client_id = int(row[0])
@@ -28,6 +33,8 @@ for filename in os.listdir(folder_path):
                 # If the client is not in the dictionary, create a new list with the latency as the first element
                 client_latency[client_id] = [latency]
 
+p99s = []
+
 # Calculate the average and standard deviation for each client
 for client_id, latencies in client_latency.items():
     avg_latency = statistics.mean(latencies)
@@ -36,7 +43,11 @@ for client_id, latencies in client_latency.items():
         stdev_latency = statistics.stdev(latencies)
 
     p99_latency = np.percentile(latencies, 99)
+    p99s.append(p99_latency)
 
     # Print the results
     print(f"Client {client_id}: Average latency = {avg_latency:.2f} s, "
           f"Standard deviation = {stdev_latency:.2f} s, 99th percentile = {p99_latency:.2f} s")
+
+stdev_clients = statistics.stdev(p99s)
+print(f"Standard deviation for clients' faireness: {stdev_clients:.2f} s")

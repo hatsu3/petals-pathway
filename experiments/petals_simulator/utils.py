@@ -11,7 +11,7 @@ import torch.nn as nn
 
 from multitask_model import MultiTaskModel, Stage, TaskPath
 from messages import InferRequest
-from trace_visualizer import TraceVisualizer
+from trace_visualizer import TraceFile, TraceVisualizer
 from stage_profiler import ProfilingResults
 
 
@@ -145,7 +145,7 @@ class GPUTask:
 
     # Execute the function and store the result
     # Called by the worker thread
-    @TraceVisualizer(log_file_path='trace.json')
+    # @TraceVisualizer(log_file_path=TraceFile.file_path)
     def execute(self):
         try:
             self.result = self.function(*self.args, **self.kwargs)
@@ -163,21 +163,6 @@ class GPUTask:
             raise self.exception
         return self.result
     
-
-class TraceFile:
-    def __init__(self, file_name):
-        self.file_name = file_name
-
-    def __enter__(self):
-        if os.path.exists(self.file_name):
-            os.remove(self.file_name)
-        
-        with open(self.file_name, 'a') as f:
-            f.write("[\n")
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        with open(self.file_name, 'a') as f:
-            f.write("]\n")
 
 
 if __name__ == "__main__":

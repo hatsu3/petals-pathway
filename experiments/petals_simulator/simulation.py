@@ -2,13 +2,14 @@ import os
 import random
 import logging
 import threading
+import argparse
 
 from server import Server
 from client import Client, RequestMode
 from dht import DistributedHashTable
 from latency_estimator import LatencyEstimator, generate_random_location
 from utils import get_dummy_model_and_prof_results, TraceFile
-from scheduling import RandomSchedulingPolicy, LatencyAwareSchedulingPolicy
+from scheduling import RandomSchedulingPolicy, FIFOSchedulingPolicy, LatencyAwareSchedulingPolicy
 from routing import (
     RoutingPolicy, RandomRoutingPolicy, 
     QueueLengthRoutingPolicy, RequestRateRoutingPolicy
@@ -17,6 +18,8 @@ from stage_assignment import (
     StageAssignmentPolicy, AllToAllStageAssignmentPolicy, 
     UniformStageAssignmentPolicy, RequestRateStageAssignmentPolicy
 )
+
+from trace_visualizer import TraceFile
 
 
 class Simulator:
@@ -51,15 +54,16 @@ class Simulator:
 
 def run_simulation(
         num_servers: int = 8, num_clients: int = 50,
-        server_run_time: int = 20, client_run_time: int = 20,
+        server_run_time: int = 60, client_run_time: int = 60,
         stage_latency: int = 30, model_gen_seed: int = 42,
-        sched_policy_cls: type = LatencyAwareSchedulingPolicy,
+        sched_policy_cls: type = RandomSchedulingPolicy,
         routing_policy_cls: type = RandomRoutingPolicy,
         stage_assign_policy_cls: type = RequestRateStageAssignmentPolicy,
         server_announce_interval: int = 3,
         server_rebalance_interval: int = 3,
         client_request_mode: RequestMode = RequestMode.POISSON,
         client_request_avg_interval: int = 1,
+        prefix: str = "."
     ):
     # Construct dummy model, initialize DHT and get latency estimates
     # we specify a seed to make the results reproducible
@@ -110,6 +114,7 @@ def run_simulation(
             server_sel_policy=routing_policy,
             request_mode=client_request_mode,
             request_avg_interval=client_request_avg_interval,
+            prefix=prefix
         ))
 
     simulator = Simulator(servers, clients)
@@ -119,7 +124,23 @@ def run_simulation(
     )
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--num-clients', type=int, default=8)
+    parser.add_argument('--num-servers', type=int, default=50)
+    parser.add_argument('--stage-assignment', choices=['AllToAllStageAssignmentPolicy', 'UniformStageAssignmentPolicy', 'RequestRateStageAssignmentPolicy'])
+    parser.add_argument('--routing', choices=['RandomRoutingPolicy', 'QueueLengthRoutingPolicy', 'RequestRateRoutingPolicy'])
+    parser.add_argument('--scheduling', choices=['RandomSchedulingPolicy', 'FIFOSchedulingPolicy', "LatencyAwareSchedulingPolicy"])
+    parser.add_argument('--prefix', type=str, default='.')
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    with TraceFile('trace.json'):
-        run_simulation()
+    logging.basicConfig(level=logging.WARNING)
+    args = parse_args()
+    # with TraceFile(args.prefix + '/trace.json'):
+    run_simulation(num_servers=args.num_servers, num_clients=args.num_clients,
+                    stage_assign_policy_cls=globals()[args.stage_assignment],
+                    routing_policy_cls=globals()[args.routing],
+                    sched_policy_cls=globals()[args.scheduling],
+                    prefix=args.prefix)

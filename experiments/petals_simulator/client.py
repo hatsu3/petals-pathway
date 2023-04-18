@@ -35,7 +35,8 @@ class Client:
                  latency_est: LatencyEstimator,
                  server_sel_policy: RoutingPolicy, 
                  request_mode=RequestMode.POISSON,
-                 request_avg_interval=5):
+                 request_avg_interval=5,
+                 prefix="./"):
         
         self.ip = ip
         self.port = port
@@ -52,6 +53,8 @@ class Client:
         self.is_running = True
         self.pending_requests = {}
         self.response_queue = queue.Queue()
+
+        self.prefix = prefix
 
         logging.info(f"Client {self.client_id} initialized to {self.location}.")
 
@@ -108,11 +111,11 @@ class Client:
 
     def receive_responses(self):
         # Create the `e2e_latency` directory if it is not there
-        os.makedirs(f"e2e_latency", exist_ok=True)
+        os.makedirs(f"{self.prefix}", exist_ok=True)
 
         # Delete files in the `e2e_latency` directory
-        if os.path.exists(f"e2e_latency/{self.client_id}.csv"):
-            os.remove(f"e2e_latency/{self.client_id}.csv")
+        if os.path.exists(f"{self.prefix}/{self.client_id}.csv"):
+            os.remove(f"{self.prefix}/{self.client_id}.csv")
 
         while self.is_running:
             try:
@@ -130,7 +133,7 @@ class Client:
                 logging.info(f"Client {self.client_id} received response from server {server_id} for request {response.request_id}.")
 
                 # collecting end-to-end latency information for evaluation part
-                with open(f"e2e_latency/{self.client_id}.csv", "a") as f:
+                with open(f"{self.prefix}/{self.client_id}.csv", "a") as f:
                     f.write(f"{self.client_id}, {end_to_end_latency}\n")
 
             except queue.Empty:

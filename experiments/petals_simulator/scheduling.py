@@ -23,8 +23,22 @@ class RandomSchedulingPolicy(SchedulingPolicy):
 
     """A baseline scheduling policy that randomly assigns priorities"""
 
+    def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
+        super().__init__(model)
+
     def calculate_priority(self, task: GPUTask) -> float:
         return random.uniform(0, 100)
+
+
+class FIFOSchedulingPolicy(SchedulingPolicy):
+
+    """A baselien scheduling policy that conforms to FIFO."""
+
+    def __init__(self, model: MultiTaskModel, profiling_results: ProfilingResults):
+        super().__init__(model)
+
+    def calculate_priority(self, task: GPUTask) -> float:
+        return time.time()
 
 
 class LatencyAwareSchedulingPolicy(SchedulingPolicy):
