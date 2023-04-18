@@ -45,9 +45,10 @@ for client_id, latencies in client_latency.items():
     p99_latency = np.percentile(latencies, 99)
     p99s.append(p99_latency)
 
-    # Print the results
-    print(f"Client {client_id}: Average latency = {avg_latency:.2f} s, "
-          f"Standard deviation = {stdev_latency:.2f} s, 99th percentile = {p99_latency:.2f} s")
+    # # Print the results
+    # print(f"Client {client_id}: Average latency = {avg_latency:.2f} s, "
+    #       f"Standard deviation = {stdev_latency:.2f} s, 99th percentile = {p99_latency:.2f} s")
 
+avg_clients = statistics.mean(p99s)
 stdev_clients = statistics.stdev(p99s)
-print(f"Standard deviation for clients' faireness: {stdev_clients:.2f} s")
+print(f"avg: {avg_clients:.2f}  stddev: {stdev_clients:.2f} s")
