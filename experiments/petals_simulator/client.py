@@ -26,7 +26,6 @@ class RequestMode(Enum):
 class Client:
     def __init__(self, 
                  ip: str,
-                 port: int,
                  client_id: int, 
                  location: Point, 
                  task_name: str,
@@ -39,7 +38,7 @@ class Client:
                  prefix="./"):
         
         self.ip = ip
-        self.port = port
+        self.port = None
         self.client_id = client_id
         self.location = location
         self.task_name = task_name
@@ -144,9 +143,11 @@ class Client:
 
     def connection_handler(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind(('0.0.0.0', self.port))
+        server_socket.bind(('localhost', 0))
         server_socket.listen()
         server_socket.settimeout(5.0)
+
+        self.port = int(server_socket.getsockname()[1])
 
         while self.is_running:
             try:
@@ -158,6 +159,9 @@ class Client:
         server_socket.close()
 
     def send_requests(self):
+        while self.port is None:
+            continue
+        
         while self.is_running:
 
             # Create a new request ID and add it to pending requests set.
@@ -181,8 +185,8 @@ class Client:
             time.sleep(self.get_request_interval())
 
     def run(self, run_time: float):
-        request_thread = threading.Thread(target=self.send_requests)
         listener_thread = threading.Thread(target=self.connection_handler)
+        request_thread = threading.Thread(target=self.send_requests)
         response_thread = threading.Thread(target=self.receive_responses)
 
         request_thread.start()

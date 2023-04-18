@@ -82,7 +82,7 @@ class ConnectionHandler(threading.Thread):
         super().__init__()
         self.server = server
         self.task_pool = server.task_pool
-        self.port = server.port
+        self.port = None
         self.model = server.model
         self.prof_results = server.prof_results
         self.num_workers = num_workers
@@ -119,9 +119,11 @@ class ConnectionHandler(threading.Thread):
 
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.bind(('localhost', self.port))
+            sock.bind(('localhost', 0))
             sock.listen()
             sock.settimeout(5.0)
+            self.port = int(sock.getsockname()[1])
+            self.server.port = self.port
 
             with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
                 while self.server.is_running:
@@ -285,6 +287,9 @@ class DHTAnnouncer(threading.Thread):
         if self.dht.get_server_status(server_id) == ServerStatus.STOPPING:
             return
 
+        while self.server.port is None:
+            continue
+        
         # List all the information that potentially needs to be sent to DHT
         # NOTE: For now, we simply refresh all the information every time (at least it does not hurt)
         self.dht.modify_server_info(server_id, "ip", self.server.ip)
@@ -353,7 +358,6 @@ class Server:
     
     def __init__(self, 
                  ip: str,
-                 port: int,
                  location: Point,
                  dht: DistributedHashTable,
                  model: MultiTaskModel,
@@ -370,7 +374,7 @@ class Server:
 
         # server's configurations
         self.ip = ip
-        self.port = port
+        self.port = None
         self.location = location
         self.dht = dht
         self.model = model

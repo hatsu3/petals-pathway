@@ -1,4 +1,5 @@
 import os
+import socket
 import random
 import logging
 import threading
@@ -79,13 +80,11 @@ def run_simulation(
     # TODO: remove update_interval because it is not used now
     routing_policy = routing_policy_cls(model, dht, update_interval=3)
     stage_assign_policy = stage_assign_policy_cls(model, dht)
-
+    
     servers = list()
-    server_port_offset = random.randint(5000, 6000)
     for i in range(num_servers):
         servers.append(Server(
             ip="127.0.0.1",
-            port=server_port_offset + i,
             location=generate_random_location(),
             dht=dht,
             model=model,
@@ -100,11 +99,9 @@ def run_simulation(
         ))
 
     clients = list()
-    client_port_offset = random.randint(7000, 8000)
     for i in range(num_clients):
         clients.append(Client(
             ip="127.0.0.1",
-            port=client_port_offset + i,
             client_id=i,
             location=generate_random_location(),
             task_name=random.choice(list(model.paths.keys())),
