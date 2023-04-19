@@ -16,6 +16,9 @@ if len(sys.argv) < 2:
 # extract the directory path from the command line argument
 directory = os.path.abspath(sys.argv[1])
 
+parts = sys.argv[1].split("/")[-2].split("_")
+combination = parts[-3] + "+" + parts[-2] + "+" + parts[-1]
+
 # Loop through all the files in the folder
 for filename in os.listdir(directory):
     # Read the file and parse each line
@@ -35,6 +38,8 @@ for filename in os.listdir(directory):
 
 p99s = []
 
+print(f"{combination}", end="")
+
 # Calculate the average and standard deviation for each client
 for client_id, latencies in client_latency.items():
     avg_latency = statistics.mean(latencies)
@@ -42,13 +47,15 @@ for client_id, latencies in client_latency.items():
     if len(latencies) > 1:
         stdev_latency = statistics.stdev(latencies)
 
-    p99_latency = np.percentile(latencies, 99)
-    p99s.append(p99_latency)
+    # p99_latency = np.percentile(latencies, 50)
+    # p99s.append(p99_latency)
 
-    # # Print the results
+    # Print the results
     # print(f"Client {client_id}: Average latency = {avg_latency:.2f} s, "
     #       f"Standard deviation = {stdev_latency:.2f} s, 99th percentile = {p99_latency:.2f} s")
+    print(f", {avg_latency:.2f}", end="")
 
-avg_clients = statistics.mean(p99s)
-stdev_clients = statistics.stdev(p99s)
-print(f"avg: {avg_clients:.2f}  stddev: {stdev_clients:.2f} s")
+# avg_clients = statistics.mean(p99s)
+# stdev_clients = statistics.stdev(p99s)
+# print(f"avg: {avg_clients:.2f}  stddev: {stdev_clients:.2f} s")
+print("")

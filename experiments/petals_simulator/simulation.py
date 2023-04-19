@@ -123,11 +123,11 @@ def run_simulation(
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num-clients', type=int, default=8)
-    parser.add_argument('--num-servers', type=int, default=50)
-    parser.add_argument('--stage-assignment', choices=['AllToAllStageAssignmentPolicy', 'UniformStageAssignmentPolicy', 'RequestRateStageAssignmentPolicy'])
-    parser.add_argument('--routing', choices=['RandomRoutingPolicy', 'QueueLengthRoutingPolicy', 'RequestRateRoutingPolicy'])
-    parser.add_argument('--scheduling', choices=['RandomSchedulingPolicy', 'FIFOSchedulingPolicy', "LatencyAwareSchedulingPolicy"])
+    parser.add_argument('--num-clients', type=int, default=50)
+    parser.add_argument('--num-servers', type=int, default=8)
+    parser.add_argument('--stage-assignment', choices=['AllToAllStageAssignmentPolicy', 'UniformStageAssignmentPolicy', 'RequestRateStageAssignmentPolicy'], default='RequestRateStageAssignmentPolicy')
+    parser.add_argument('--routing', choices=['RandomRoutingPolicy', 'QueueLengthRoutingPolicy', 'RequestRateRoutingPolicy'], default='RequestRateRoutingPolicy')
+    parser.add_argument('--scheduling', choices=['RandomSchedulingPolicy', 'FIFOSchedulingPolicy', "LatencyAwareSchedulingPolicy"], default='LatencyAwareSchedulingPolicy')
     parser.add_argument('--prefix', type=str, default='.')
     return parser.parse_args()
 
@@ -135,9 +135,9 @@ def parse_args():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
     args = parse_args()
-    # with TraceFile(args.prefix + '/trace.json'):
-    run_simulation(num_servers=args.num_servers, num_clients=args.num_clients,
-                    stage_assign_policy_cls=globals()[args.stage_assignment],
-                    routing_policy_cls=globals()[args.routing],
-                    sched_policy_cls=globals()[args.scheduling],
-                    prefix=args.prefix)
+    with TraceFile('./trace.json'):
+        run_simulation(num_servers=args.num_servers, num_clients=args.num_clients,
+                        stage_assign_policy_cls=globals()[args.stage_assignment],
+                        routing_policy_cls=globals()[args.routing],
+                        sched_policy_cls=globals()[args.scheduling],
+                        prefix=args.prefix)

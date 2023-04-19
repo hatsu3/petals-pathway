@@ -145,7 +145,7 @@ class GPUTask:
 
     # Execute the function and store the result
     # Called by the worker thread
-    # @TraceVisualizer(log_file_path=TraceFile.file_path)
+    @TraceVisualizer(log_file_path='./trace.json')
     def execute(self):
         try:
             self.result = self.function(*self.args, **self.kwargs)
